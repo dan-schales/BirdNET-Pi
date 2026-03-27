@@ -1,40 +1,10 @@
 <?php
-require_once 'scripts/common.php';
-$config = get_config();
-$site_name = get_sitename();
-$color_scheme = get_color_scheme();
-set_timezone();
+/**
+ * Livestream view - embedded version for views.php navigation
+ * This renders the livestream content within the main app layout
+ */
 $authenticated = is_authenticated();
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title><?php echo $site_name; ?> - Livestream</title>
-<link rel="shortcut icon" sizes="85x85" href="images/bird.png" />
-<link rel="stylesheet" href="<?php echo $color_scheme . '?v=' . date('n.d.y', filemtime($color_scheme)); ?>">
-</head>
-<body style="padding-top: 56px;">
-
-<header class="app-header">
-  <div class="header-left">
-    <a href="/" class="logo-link">
-      <img src="images/bird.png" alt="BirdNET-Pi" class="header-logo">
-    </a>
-    <a href="/" class="site-title">
-      <img class="header-wordmark" src="images/bnp.png" alt="BirdNET-Pi">
-      <span class="site-name"><?php echo $site_name; ?></span>
-    </a>
-  </div>
-  <div class="header-right">
-    <a href="/" class="header-btn" style="background: #e8f5e9; color: #1a6b3c; text-decoration: none;">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-      Back to Dashboard
-    </a>
-  </div>
-</header>
-
 <div class="livestream-view">
 
   <!-- Live Audio Player -->
@@ -84,13 +54,13 @@ var recordingPollTimer = null;
 var authenticated = <?php echo $authenticated ? 'true' : 'false'; ?>;
 
 // --- Audio player status ---
-var audio = document.getElementById('ls-audio');
+var lsAudio = document.getElementById('ls-audio');
 var statusEl = document.getElementById('ls-stream-status');
-if (audio) {
-  audio.addEventListener('playing', function() { statusEl.textContent = 'Streaming live audio...'; });
-  audio.addEventListener('pause', function() { statusEl.textContent = 'Paused'; });
-  audio.addEventListener('error', function() { statusEl.textContent = 'Stream unavailable - is the livestream service running?'; });
-  audio.addEventListener('waiting', function() { statusEl.textContent = 'Buffering...'; });
+if (lsAudio) {
+  lsAudio.addEventListener('playing', function() { statusEl.textContent = 'Streaming live audio...'; });
+  lsAudio.addEventListener('pause', function() { statusEl.textContent = 'Paused'; });
+  lsAudio.addEventListener('error', function() { statusEl.textContent = 'Stream unavailable - is the livestream service running?'; });
+  lsAudio.addEventListener('waiting', function() { statusEl.textContent = 'Buffering...'; });
 }
 
 // --- Recording controls ---
@@ -257,5 +227,3 @@ if (authenticated) {
   });
 }
 </script>
-</body>
-</html>

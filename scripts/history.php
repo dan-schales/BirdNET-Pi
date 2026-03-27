@@ -130,35 +130,45 @@ function submitID() {
 
 </script>  
 
-<form action="views.php" method="GET">
-  <input type="date" name="date" value="<?php echo $theDate;?>">
-  <button type="submit" name="view" value="Daily Charts">Submit Date</button>
-</form>
-<br>
-<table class="overview">
-  <tr>
-    <th>Total Detections For The Day</th>
-    <td><?php echo $totalcount['COUNT(*)']; ?></td>
-    <td style="padding:unset"><img src="images/spinner.gif" id="SwipeSpinner" hidden style="height:30px;"></td>
-  </tr>
-</table>
-    	<?php // <br><button type="button" onclick="showDialog()">Export as CSV for eBird</button><br><br> ?>
-<?php
-$time = time();
+<div class="history-content">
+  <div class="history-controls">
+    <form action="views.php" method="GET" class="date-picker-form">
+      <input type="date" name="date" value="<?php echo $theDate;?>" class="date-input">
+      <button type="submit" name="view" value="Daily Charts" class="date-submit-btn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+        View
+      </button>
+    </form>
+  </div>
 
-if (file_exists('./Charts/'.$chart)) {
-  echo "<img src=\"/Charts/$chart?nocache=$time\" >";
-} else {
-  echo "<p>No Charts for $theDate</p>";
-}
-echo "<hr>";
-if (file_exists('./Charts/'.$chart2)) {
-  echo "<img src=\"/Charts/$chart2?nocache=$time\">";
-} else {
-  echo "<p>No Charts For $theDate</p>";
-}
-echo "</div>";
+  <div class="history-stats">
+    <div class="stat-card">
+      <div class="stat-value"><?php echo $totalcount['COUNT(*)']; ?></div>
+      <div class="stat-label">Detections on <?php echo $theDate; ?></div>
+    </div>
+    <img src="images/spinner.gif" id="SwipeSpinner" hidden style="height:24px;">
+  </div>
+
+  <div class="chart-container">
+  <?php
+  $time = time();
+  if (file_exists('./Charts/'.$chart)) {
+    echo "<img class=\"chart-image\" src=\"/Charts/$chart?nocache=$time\">";
+  } else {
+    echo "<div class=\"chart-empty\">No charts available for $theDate</div>";
+  }
+  ?>
+  </div>
+  <?php if (file_exists('./Charts/'.$chart2)) { ?>
+  <div class="chart-container">
+    <?php echo "<img class=\"chart-image\" src=\"/Charts/$chart2?nocache=$time\">"; ?>
+  </div>
+  <?php } ?>
+</div>
+</div>
+<?php
 if (get_included_files()[0] === __FILE__) {
 	echo '</html>
 </body>';
 }
+?>

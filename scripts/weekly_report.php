@@ -135,70 +135,90 @@ if(isset($_GET['ascii'])) {
 }
 
 ?>
-<div class="brbanner"> <?php
-echo "<h1>Week ".date('W', $enddate)." Report</h1>".date('F jS, Y',$startdate)." — ".date('F jS, Y',$enddate)."<br>";
-?>
-</div>
-<br>
-<?php // TODO: fix the box shadows, maybe make them a bit smaller on the tr ?>
-<table align="center" style="box-shadow:unset"><tr><td style="background-color:transparent">
-	<table>
-	<thead>
-		<tr>
-			<th><?php echo "Top 10 Species: <br>"; ?></th>
-		</tr>
-	</thead>
-	<tbody>
-	<?php
+<div class="weekly-report">
+  <div class="report-header">
+    <h1>Week <?php echo date('W', $enddate); ?> Report</h1>
+    <p class="report-date-range"><?php echo date('F jS, Y', $startdate); ?> — <?php echo date('F jS, Y', $enddate); ?></p>
+  </div>
 
-	$i = 0;
-	foreach($detections as $com_name=>$stats)
-	{
-		$i++;
-		if($i <= 10) {
-        $count = $stats["count"];
-        $percentagediff = $stats["percentagediff"];
-			if($percentagediff > 0) {
-				$percentagediff = "<span style='color:green;font-size:small'>+".$percentagediff."%</span>";
-			} else {
-				$percentagediff = "<span style='color:red;font-size:small'>-".abs($percentagediff)."%</span>";
-			}
+  <div class="report-summary">
+    <?php
+    $pctTotal = safe_percentage($totalcount, $priortotalcount);
+    $pctSpecies = safe_percentage($totalspeciestally, $priortotalspeciestally);
+    ?>
+    <div class="report-stat-card">
+      <div class="report-stat-value"><?php echo number_format($totalcount); ?></div>
+      <div class="report-stat-label">Total Detections</div>
+      <div class="report-stat-change <?php echo $pctTotal >= 0 ? 'positive' : 'negative'; ?>">
+        <?php echo ($pctTotal >= 0 ? '+' : '') . $pctTotal; ?>%
+      </div>
+    </div>
+    <div class="report-stat-card">
+      <div class="report-stat-value"><?php echo $totalspeciestally; ?></div>
+      <div class="report-stat-label">Unique Species</div>
+      <div class="report-stat-change <?php echo $pctSpecies >= 0 ? 'positive' : 'negative'; ?>">
+        <?php echo ($pctSpecies >= 0 ? '+' : '') . $pctSpecies; ?>%
+      </div>
+    </div>
+  </div>
 
-			echo "<tr><td>".$com_name."<br><small style=\"font-size:small\">".$count." (".$percentagediff.")</small><br></td></tr>";
-		}
-	}
-	?>
-	</tbody>
-	</table>
-	</td><td style="background-color:transparent">
+  <div class="report-columns">
+    <div class="report-card">
+      <h2>Top 10 Species</h2>
+      <div class="report-species-list">
+      <?php
+      $i = 0;
+      foreach($detections as $com_name => $stats) {
+        $i++;
+        if($i <= 10) {
+          $count = $stats["count"];
+          $percentagediff = $stats["percentagediff"];
+          $changeClass = $percentagediff >= 0 ? 'positive' : 'negative';
+          $changeSign = $percentagediff >= 0 ? '+' : '';
+      ?>
+        <div class="report-species-item">
+          <span class="report-species-rank"><?php echo $i; ?></span>
+          <div class="report-species-info">
+            <span class="report-species-name"><?php echo $com_name; ?></span>
+            <span class="report-species-count"><?php echo $count; ?> detections</span>
+          </div>
+          <span class="report-stat-change <?php echo $changeClass; ?>"><?php echo $changeSign . $percentagediff; ?>%</span>
+        </div>
+      <?php
+        }
+      }
+      ?>
+      </div>
+    </div>
 
-	<table >
-	<thead>
-		<tr>
-			<th><?php echo "Species Detected for the First Time: <br>"; ?></th>
-		</tr>
-	</thead>
-	<tbody>
-	<?php 
+    <div class="report-card">
+      <h2>New Species</h2>
+      <div class="report-species-list">
+      <?php
+      $newspeciescount = 0;
+      foreach($detections as $com_name => $stats) {
+        if($stats["is_first_seen"]) {
+          $newspeciescount++;
+      ?>
+        <div class="report-species-item">
+          <span class="report-new-badge">NEW</span>
+          <div class="report-species-info">
+            <span class="report-species-name"><?php echo $com_name; ?></span>
+            <span class="report-species-count"><?php echo $stats["count"]; ?> detections</span>
+          </div>
+        </div>
+      <?php
+        }
+      }
+      if($newspeciescount == 0) {
+        echo '<div class="report-empty">No new species were seen this week.</div>';
+      }
+      ?>
+      </div>
+    </div>
+  </div>
 
-  $newspeciescount=0;
-	foreach($detections as $com_name=>$stats)
-	{
-		if($stats["is_first_seen"]) {
-			$newspeciescount++;
-			echo "<tr><td>".$com_name."<br><small style=\"font-size:small\">".$scount."</small><br></td></tr>";
-		}
-	}
-	if($newspeciescount == 0) {
-		echo "<tr><td>No new species were seen this week.</td></tr>";
-	}
-	?>
-	</tbody>
-	</table>
-	</td></tr></table>
-
-
-<br>
-<div style="text-align:center">
-	<hr><small style="font-size:small">* percentages are calculated relative to week <?php echo date('W', $enddate) - 1; ?></small>
+  <div class="report-footer">
+    <p>Percentages calculated relative to week <?php echo date('W', $enddate) - 1; ?></p>
+  </div>
 </div>

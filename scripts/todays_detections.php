@@ -279,31 +279,40 @@ if(isset($_GET['ajax_detections']) && $_GET['ajax_detections'] == "true"  ) {
 
 if(isset($_GET['today_stats'])) {
   ?>
-  <table>
-      <tr>
-  <th>Total</th>
-  <th>Today</th>
-  <th>Last Hour</th>
-  <th>Species Total</th>
-  <th>Species Today</th>
-      </tr>
-      <tr><td><?php echo $totalcount;?></td>
-	      <td><form action="" method="GET"><input type="hidden" name="view" value="Recordings">
-            <?php if($kiosk == false){?><button type="submit" name="date" value="<?php echo date('Y-m-d');?>"><?php echo $todaycount;?></button>
-            <?php } else { echo $todaycount; } ?>
-          </form></td>
-        <td><?php echo $hourcount;?></td>
-        <td><form action="" method="GET">
-            <?php if($kiosk == false){?><button type="submit" name="view" value="Species Stats"><?php echo $totalspeciestally;?></button>
-            <?php } else { echo $totalspeciestally; } ?>
-          </form></td>
-        <td><form action="" method="GET">
-            <input type="hidden" name="view" value="Recordings">
-            <?php if($kiosk == false){?><button type="submit" name="date" value="<?php echo date('Y-m-d');?>"><?php echo $todayspeciestally;?></button>
-            <?php } else { echo $todayspeciestally; } ?>
-          </form></td>
-      </tr>
-    </table>
+  <div class="stats-grid stats-grid-horizontal">
+  <div class="stat-card stat-card-compact">
+    <div class="stat-value"><?php echo $totalcount;?></div>
+    <div class="stat-label">Total</div>
+  </div>
+  <div class="stat-card stat-card-compact">
+    <form action="" method="GET"><input type="hidden" name="view" value="Recordings">
+      <?php if($kiosk == false){?><button type="submit" name="date" value="<?php echo date('Y-m-d');?>" class="stat-link">
+        <div class="stat-value"><?php echo $todaycount;?></div>
+        <div class="stat-label">Today</div>
+      </button><?php } else { echo '<div class="stat-value">'.$todaycount.'</div><div class="stat-label">Today</div>'; } ?>
+    </form>
+  </div>
+  <div class="stat-card stat-card-compact">
+    <div class="stat-value"><?php echo $hourcount;?></div>
+    <div class="stat-label">Last Hour</div>
+  </div>
+  <div class="stat-card stat-card-compact">
+    <form action="" method="GET">
+      <?php if($kiosk == false){?><button type="submit" name="view" value="Species Stats" class="stat-link">
+        <div class="stat-value"><?php echo $totalspeciestally;?></div>
+        <div class="stat-label">Species Total</div>
+      </button><?php } else { echo '<div class="stat-value">'.$totalspeciestally.'</div><div class="stat-label">Species Total</div>'; } ?>
+    </form>
+  </div>
+  <div class="stat-card stat-card-compact">
+    <form action="" method="GET"><input type="hidden" name="view" value="Recordings">
+      <?php if($kiosk == false){?><button type="submit" name="date" value="<?php echo date('Y-m-d');?>" class="stat-link">
+        <div class="stat-value"><?php echo $todayspeciestally;?></div>
+        <div class="stat-label">Species Today</div>
+      </button><?php } else { echo '<div class="stat-value">'.$todayspeciestally.'</div><div class="stat-label">Species Today</div>'; } ?>
+    </form>
+  </div>
+</div>
 <?php   
 die(); 
 }
@@ -397,26 +406,53 @@ if (get_included_files()[0] === __FILE__) {
     showDialog();
   }
   </script>  
-    <h3>Number of Detections</h3>
-    <div id="todaystats" class="overview"><form action="views.php" method="GET"><table>
-      <tr>
-  <th>Total</th>
-  <th>Today</th>
-  <th>Last Hour</th>
-  <th>Species Total</th>
-  <th>Species Today</th>
-      </tr>
-      <tr>
-      <td><?php echo $totalcount;?></td>
-      <td><input type="hidden" name="view" value="Recordings"><?php if($kiosk == false){?><button type="submit" name="date" value="<?php echo date('Y-m-d');?>"><?php echo $todaycount;?></button><?php } else { echo $todaycount; }?></td>
-      <td><?php echo $hourcount;?></td>
-      <td><?php if($kiosk == false){?><button type="submit" name="view" value="Species Stats"><?php echo $totalspeciestally;?></button><?php }else { echo $totalspeciestally; }?></td>
-      <td><input type="hidden" name="view" value="Recordings"><?php if($kiosk == false){?><button type="submit" name="date" value="<?php echo date('Y-m-d');?>"><?php echo $todayspeciestally;?></button><?php } else { echo $todayspeciestally; }?></td>
-      </tr>
-    </table></form></div>
+    <div id="todaystats" class="overview">
+      <div class="stats-grid stats-grid-horizontal">
+        <div class="stat-card stat-card-compact">
+          <div class="stat-value"><?php echo $totalcount;?></div>
+          <div class="stat-label">Total</div>
+        </div>
+        <div class="stat-card stat-card-compact">
+          <form action="views.php" method="GET"><input type="hidden" name="view" value="Recordings">
+            <button type="submit" name="date" value="<?php echo date('Y-m-d');?>" class="stat-link">
+              <div class="stat-value"><?php echo $todaycount;?></div>
+              <div class="stat-label">Today</div>
+            </button>
+          </form>
+        </div>
+        <div class="stat-card stat-card-compact">
+          <div class="stat-value"><?php echo $hourcount;?></div>
+          <div class="stat-label">Last Hour</div>
+        </div>
+        <div class="stat-card stat-card-compact">
+          <form action="views.php" method="GET">
+            <button type="submit" name="view" value="Species Stats" class="stat-link">
+              <div class="stat-value"><?php echo $totalspeciestally;?></div>
+              <div class="stat-label">Species Total</div>
+            </button>
+          </form>
+        </div>
+        <div class="stat-card stat-card-compact">
+          <form action="views.php" method="GET"><input type="hidden" name="view" value="Recordings">
+            <button type="submit" name="date" value="<?php echo date('Y-m-d');?>" class="stat-link">
+              <div class="stat-value"><?php echo $todayspeciestally;?></div>
+              <div class="stat-label">Species Today</div>
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
 
 
-    <h3>Today's Detections <?php if($kiosk == false) { ?>— <input autocomplete="off" size="18" type="text" placeholder="Search..." id="searchterm" name="searchterm"><?php } ?></h3>
+    <div class="detections-header">
+      <h3>Today's Detections</h3>
+      <?php if($kiosk == false) { ?>
+      <div class="search-container">
+        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        <input autocomplete="off" type="text" placeholder="Search species, confidence, time..." id="searchterm" name="searchterm" class="search-input">
+      </div>
+      <?php } ?>
+    </div>
 
     <div style="padding-bottom:10px" id="detections_table"><h3>Loading...</h3></div>
 

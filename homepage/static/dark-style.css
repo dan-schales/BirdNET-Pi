@@ -1189,6 +1189,347 @@ pre#timer.bash {
   }
 }
 
+/* ========== WEEKLY REPORT ========== */
+.weekly-report {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+.report-header {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.report-header h1 {
+  font-size: 1.8em;
+  font-weight: 700;
+  color: #7dcc8e;
+  margin: 0 0 4px 0;
+}
+
+.report-date-range {
+  color: #888;
+  font-size: 0.95em;
+}
+
+.report-summary {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  margin-bottom: 24px;
+}
+
+.report-stat-card {
+  background: #1e1e1e;
+  border-radius: 12px;
+  padding: 20px 32px;
+  text-align: center;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  flex: 1;
+  max-width: 250px;
+}
+
+.report-stat-value {
+  font-size: 2em;
+  font-weight: 700;
+  color: #7dcc8e;
+  line-height: 1.2;
+}
+
+.report-stat-label {
+  font-size: 0.8em;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 2px 0 6px 0;
+}
+
+.report-stat-change {
+  font-size: 0.85em;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 12px;
+  display: inline-block;
+}
+
+.report-stat-change.positive {
+  color: #7dcc8e;
+  background: #1a2e1e;
+}
+
+.report-stat-change.negative {
+  color: #ef9a9a;
+  background: #2e1a1a;
+}
+
+.report-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.report-card {
+  background: #1e1e1e;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+
+.report-card h2 {
+  font-size: 1.1em;
+  font-weight: 600;
+  margin: 0 0 16px 0;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #333;
+  color: #e0e0e0;
+}
+
+.report-species-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.report-species-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  transition: background 0.15s;
+}
+
+.report-species-item:hover {
+  background: #2a2a2a;
+}
+
+.report-species-rank {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #1a2e1e;
+  color: #7dcc8e;
+  font-weight: 700;
+  font-size: 0.8em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.report-species-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.report-species-name {
+  display: block;
+  font-weight: 500;
+  color: #e0e0e0;
+}
+
+.report-species-count {
+  display: block;
+  font-size: 0.8em;
+  color: #888;
+}
+
+.report-new-badge {
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: #1a2e1e;
+  color: #7dcc8e;
+  font-size: 0.7em;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+
+.report-empty {
+  color: #666;
+  text-align: center;
+  padding: 20px;
+  font-style: italic;
+}
+
+.report-footer {
+  text-align: center;
+  color: #666;
+  font-size: 0.8em;
+  border-top: 1px solid #333;
+  padding-top: 12px;
+}
+
+@media (max-width: 700px) {
+  .report-columns {
+    grid-template-columns: 1fr;
+  }
+  .report-summary {
+    flex-direction: column;
+    align-items: center;
+  }
+  .report-stat-card {
+    width: 100%;
+    max-width: none;
+  }
+}
+
+/* ========== TODAY'S DETECTIONS ========== */
+.detections-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.detections-header h3 {
+  margin: 0;
+}
+
+.search-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-icon {
+  position: absolute;
+  left: 10px;
+  stroke: #666;
+  pointer-events: none;
+}
+
+.search-input {
+  padding: 8px 12px 8px 34px;
+  border: 1px solid #444;
+  border-radius: 8px;
+  font-size: 0.9em;
+  width: 280px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  background: #2a2a2a;
+  color: #e0e0e0;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: #7dcc8e;
+  box-shadow: 0 0 0 3px rgba(125, 204, 142, 0.15);
+}
+
+/* ========== DAILY CHARTS ========== */
+.history-content {
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.history-controls {
+  margin-bottom: 16px;
+}
+
+.date-picker-form {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.date-input {
+  padding: 8px 12px;
+  border: 1px solid #444;
+  border-radius: 8px;
+  font-size: 0.95em;
+  background: #2a2a2a;
+  color: #e0e0e0;
+}
+
+.date-input:focus {
+  outline: none;
+  border-color: #7dcc8e;
+  box-shadow: 0 0 0 3px rgba(125, 204, 142, 0.15);
+}
+
+.date-submit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 16px;
+  background: #2e7d46;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.date-submit-btn:hover {
+  background: #388e50;
+  color: #fff;
+}
+
+.date-submit-btn svg {
+  stroke: #fff;
+}
+
+.history-stats {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.chart-container {
+  background: #1e1e1e;
+  border-radius: 12px;
+  padding: 8px;
+  margin-bottom: 16px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  overflow: hidden;
+}
+
+.chart-image {
+  width: 100%;
+  height: auto;
+  border-radius: 8px;
+  display: block;
+}
+
+.chart-empty {
+  text-align: center;
+  color: #666;
+  padding: 40px 20px;
+  font-style: italic;
+}
+
+/* ========== STATS/BEST RECORDINGS ========== */
+.stats-sort-bar {
+  text-align: center;
+  margin-bottom: 12px;
+}
+
+.stats-sort-bar .sortbutton {
+  margin: 0 2px;
+}
+
+.stats .column {
+  vertical-align: top;
+}
+
+/* ========== VIEWDB / DETECTION ITEMS ========== */
+.viewdb table {
+  width: 100%;
+  max-width: 900px;
+}
+
+.viewdb .centered_image_container {
+  line-height: 1.5;
+}
+
 /* ========== LIVESTREAM VIEW ========== */
 .livestream-view {
   max-width: 800px;

@@ -1539,6 +1539,108 @@ pre#timer.bash {
   line-height: 1.5;
 }
 
+.viewdb td {
+  color: #e0e0e0;
+}
+
+.viewdb b {
+  color: #ccc;
+}
+
+.viewdb i {
+  color: #aaa;
+}
+
+/* Species name links */
+.a2, button.a2 {
+  color: #7dcc8e !important;
+  font-weight: 600;
+}
+
+.a2:hover, button.a2:hover {
+  color: #a3e0b0 !important;
+}
+
+/* Detection card text */
+.centered_image_container {
+  color: #e0e0e0;
+}
+
+.centered_image_container b {
+  color: #ccc;
+}
+
+.centered_image_container i {
+  color: #aaa;
+}
+
+/* Info/action icons in detections */
+.viewdb img[src*="info"], .viewdb img[src*="wiki"],
+.viewdb img[src*="chart"], .viewdb img[src*="copy"],
+.viewdb img[src*="delete"],
+.overview img[src*="info"], .overview img[src*="wiki"],
+.overview img[src*="chart"], .overview img[src*="copy"] {
+  filter: brightness(0.85) invert(0.85);
+}
+
+/* Spectrogram / chart image in overview should NOT be filtered */
+.overview .chart img, .overview #spectrogramimage,
+.chart-card img, .chart-container img {
+  filter: none;
+}
+
+/* Overview detection cards */
+.overview table {
+  color: #e0e0e0;
+}
+
+.overview td {
+  color: #e0e0e0;
+}
+
+/* New/rare species heading */
+.new_species h2, .rare_species h2 {
+  color: #e0e0e0;
+}
+
+/* Dialog styling for dark mode */
+dialog {
+  color: #e0e0e0;
+}
+
+dialog h1 {
+  color: #e0e0e0;
+}
+
+dialog p {
+  color: #ccc;
+}
+
+dialog a {
+  color: #7dcc8e;
+}
+
+/* Load more button */
+button.loadmore {
+  color: #e0e0e0;
+}
+
+/* File path text under spectrograms */
+.overview-card img + br + small,
+td[style*="min-width"] {
+  color: #888;
+}
+
+/* Legacy audio controls in dark mode */
+audio {
+  filter: invert(0.85);
+}
+
+/* But NOT the livestream audio player */
+.ls-player audio, .live-audio-player audio {
+  filter: invert(0.85);
+}
+
 /* ========== LIVESTREAM VIEW ========== */
 .livestream-view {
   max-width: 800px;

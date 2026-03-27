@@ -1494,6 +1494,16 @@ pre#timer.bash {
   line-height: 1.5;
 }
 
+/* Species name links */
+.a2, button.a2 {
+  color: #1a6b3c !important;
+  font-weight: 600;
+}
+
+.a2:hover, button.a2:hover {
+  color: #145a31 !important;
+}
+
 /* ========== LIVESTREAM VIEW ========== */
 .livestream-view {
   max-width: 800px;

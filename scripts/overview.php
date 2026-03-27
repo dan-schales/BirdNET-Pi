@@ -306,13 +306,9 @@ if (get_included_files()[0] === __FILE__) {
     last_photo_link = text;
     showDialog();
   }
-  </script>  
-<div class="overview-stats">
-<div class="left-column">
-</div>
-<div class="right-column">
-<div class="center-column">
-</div>
+  </script>
+<div class="overview-dashboard">
+<div id="overview-stats-bar"></div>
 <?php
 $statement = $db->prepare("
 SELECT d_today.Com_Name, d_today.Sci_Name, d_today.Date, d_today.Time, d_today.Confidence, d_today.File_Name, 
@@ -485,10 +481,7 @@ display_species($rare_species, 'Rare Species', true);
 </div>
 
 <div id="customimage"></div>
-<br>
 
-</div>
-</div>
 </div>
 <script>
 // we're passing a unique ID of the currently displayed detection to our script, which checks the database to see if the newest detection entry is that ID, or not. If the IDs don't match, it must mean we have a new detection and it's loaded onto the page
@@ -515,21 +508,11 @@ function loadLeftChart() {
   const xhttp = new XMLHttpRequest();
   xhttp.onload = function() {
     if(this.responseText.length > 0 && !this.responseText.includes("Database is busy")) {
-      document.getElementsByClassName("left-column")[0].innerHTML = this.responseText;
-      loadCenterChart();
+      var el = document.getElementById("overview-stats-bar");
+      if (el) el.innerHTML = this.responseText;
     }
   }
   xhttp.open("GET", "overview.php?ajax_left_chart=true", true);
-  xhttp.send();
-}
-function loadCenterChart() {
-  const xhttp = new XMLHttpRequest();
-  xhttp.onload = function() {
-    if(this.responseText.length > 0 && !this.responseText.includes("Database is busy")) {
-      document.getElementsByClassName("center-column")[0].innerHTML = this.responseText;
-    }
-  }
-  xhttp.open("GET", "overview.php?ajax_center_chart=true", true);
   xhttp.send();
 }
 function refreshTopTen() {

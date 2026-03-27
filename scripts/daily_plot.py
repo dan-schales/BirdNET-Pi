@@ -76,11 +76,11 @@ def create_plot(df_plt_today, now, is_top=None):
         facecolor = '#1e1e1e'
         text_color = '#e0e0e0'
         grid_color = '#333333'
-        bar_edge = '#2a2a2a'
-        heatmap_line = '#2a2a2a'
+        bar_edge = '#1e1e1e'
+        heatmap_line = '#1e1e1e'
         title_color = '#b0b0b0'
         tick_color = '#aaaaaa'
-        highlight_color = '#7dcc8e'
+        highlight_color = '#5eeaa0'
     else:
         facecolor = '#ffffff'
         text_color = '#2d2d2d'
@@ -111,11 +111,11 @@ def create_plot(df_plt_today, now, is_top=None):
     norm = plt.Normalize(confmax.values.min(), confmax.values.max())
     if is_top or is_top is None:
         if is_dark:
-            # Dark theme: muted green gradient
+            # Dark theme: vibrant teal-green gradient
             from matplotlib.colors import LinearSegmentedColormap
-            dark_greens = LinearSegmentedColormap.from_list('dark_greens', ['#2a4a30', '#4a8a5a', '#7dcc8e'])
+            dark_greens = LinearSegmentedColormap.from_list('dark_greens', ['#1a5c3a', '#2e9e6a', '#5eeaa0'])
             colors = dark_greens(norm(confmax)).tolist()
-            pal_heatmap = LinearSegmentedColormap.from_list('dark_heat', ['#2a3a2e', '#4a8a5a', '#7dcc8e'])
+            pal_heatmap = LinearSegmentedColormap.from_list('dark_heat', ['#1a3328', '#2e9e6a', '#5eeaa0'])
         else:
             # Light theme: clean teal-green gradient
             from matplotlib.colors import LinearSegmentedColormap
@@ -131,7 +131,7 @@ def create_plot(df_plt_today, now, is_top=None):
     else:
         from matplotlib.colors import LinearSegmentedColormap
         if is_dark:
-            modern_reds = LinearSegmentedColormap.from_list('dark_reds', ['#4a2a2a', '#8a4a4a', '#cc7d7d'])
+            modern_reds = LinearSegmentedColormap.from_list('dark_reds', ['#4a1a1a', '#c04040', '#ff7070'])
         else:
             modern_reds = LinearSegmentedColormap.from_list('modern_reds', ['#ffcdd2', '#ef5350', '#b71c1c'])
         colors = modern_reds(norm(confmax)).tolist()

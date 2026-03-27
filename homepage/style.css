@@ -347,7 +347,18 @@ button:hover {
 }
 
 .overview .chart {
-  margin-top: 10px;
+  margin-top: 0;
+}
+
+/* Dashboard layout - single column flow */
+.overview-dashboard {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 12px;
+}
+
+#overview-stats-bar {
+  margin-bottom: 16px;
 }
 
 .overview-stats {
@@ -360,13 +371,12 @@ button:hover {
 }
 
 .left-column {
-  flex: 10%;
-  padding-left: 10px;
+  display: none;
 }
 
 .right-column {
-  flex: 90%;
-  margin-right: 10%;
+  flex: 100%;
+  margin: 0;
 }
 
 .stats td {

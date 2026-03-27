@@ -34,24 +34,14 @@ def get_data(now=None):
     return df, now
 
 
-# Function to show value on bars - from https://stackoverflow.com/questions/43214978/seaborn-barplot-displaying-values
-def show_values_on_bars(ax, label):
-    conf = get_settings()
-
+# Function to show value on bars
+def show_values_on_bars(ax, label, is_dark=False):
     for i, p in enumerate(ax.patches):
-        x = p.get_x() + p.get_width() * 0.9
+        x = p.get_x() + p.get_width() + 0.5
         y = p.get_y() + p.get_height() / 2
-        # Species confidence
-        # value = '{:.0%}'.format(label.iloc[i])
-        # Species Count Total
         value = '{:n}'.format(p.get_width())
-        bbox = {'facecolor': 'lightgrey', 'edgecolor': 'none', 'pad': 1.0}
-        if conf['COLOR_SCHEME'] == "dark":
-            color = 'black'
-        else:
-            color = 'darkgreen'
-
-        ax.text(x, y, value, bbox=bbox, ha='center', va='center', size=9, color=color)
+        color = '#aaa' if is_dark else '#666'
+        ax.text(x, y, value, ha='left', va='center', size=9, color=color, fontweight='500')
 
 
 def wrap_width(txt):
@@ -79,107 +69,155 @@ def create_plot(df_plt_today, now, is_top=None):
     df_plt_selection_today = df_plt_today[df_plt_today.Sci_Name.isin(plt_selection_today.index)]
 
     conf = get_settings()
+    is_dark = conf['COLOR_SCHEME'] == "dark"
+
+    # Modern color scheme
+    if is_dark:
+        facecolor = '#1e1e1e'
+        text_color = '#e0e0e0'
+        grid_color = '#333333'
+        bar_edge = '#2a2a2a'
+        heatmap_line = '#2a2a2a'
+        title_color = '#b0b0b0'
+        tick_color = '#aaaaaa'
+        highlight_color = '#7dcc8e'
+    else:
+        facecolor = '#ffffff'
+        text_color = '#2d2d2d'
+        grid_color = '#f0f0f0'
+        bar_edge = '#ffffff'
+        heatmap_line = '#ffffff'
+        title_color = '#666666'
+        tick_color = '#666666'
+        highlight_color = '#1a6b3c'
 
     # Set up plot axes and titles
     height = max(readings / 3, 0) + 1.06
-    if conf['COLOR_SCHEME'] == "dark":
-        facecolor = 'darkgrey'
-    else:
-        facecolor = '#77C487'
 
-    f, axs = plt.subplots(1, 2, figsize=(10, height), gridspec_kw=dict(width_ratios=[3, 6]), facecolor=facecolor)
+    f, axs = plt.subplots(1, 2, figsize=(10, height), gridspec_kw=dict(width_ratios=[3, 6]),
+                          facecolor=facecolor)
+
+    for ax in axs:
+        ax.set_facecolor(facecolor)
 
     # generate y-axis order for all figures based on frequency
     freq_order = df_plt_selection_today['Sci_Name'].value_counts().index
 
-    # make color for max confidence --> this groups by name and calculates max conf
+    # make color for max confidence
     confmax = df_plt_selection_today.groupby('Sci_Name')['Confidence'].max()
-    # reorder confmax to detection frequency order
     confmax = confmax.reindex(freq_order)
 
     # norm values for color palette
     norm = plt.Normalize(confmax.values.min(), confmax.values.max())
     if is_top or is_top is None:
-        # Set Palette for graphics
-        if conf['COLOR_SCHEME'] == "dark":
-            pal = "Greys"
-            colors = plt.cm.Greys(norm(confmax)).tolist()
+        if is_dark:
+            # Dark theme: muted green gradient
+            from matplotlib.colors import LinearSegmentedColormap
+            dark_greens = LinearSegmentedColormap.from_list('dark_greens', ['#2a4a30', '#4a8a5a', '#7dcc8e'])
+            colors = dark_greens(norm(confmax)).tolist()
+            pal_heatmap = LinearSegmentedColormap.from_list('dark_heat', ['#2a3a2e', '#4a8a5a', '#7dcc8e'])
         else:
-            pal = "Greens"
-            colors = plt.cm.Greens(norm(confmax)).tolist()
+            # Light theme: clean teal-green gradient
+            from matplotlib.colors import LinearSegmentedColormap
+            modern_greens = LinearSegmentedColormap.from_list('modern_greens', ['#b2dfdb', '#4db6ac', '#1a6b3c'])
+            colors = modern_greens(norm(confmax)).tolist()
+            pal_heatmap = LinearSegmentedColormap.from_list('modern_heat', ['#e8f5e9', '#66bb6a', '#1a6b3c'])
+
         if is_top:
             plot_type = "Top"
         else:
             plot_type = 'All'
         name = "Combo"
     else:
-        # Set Palette for graphics
-        pal = "Reds"
-        colors = plt.cm.Reds(norm(confmax)).tolist()
+        from matplotlib.colors import LinearSegmentedColormap
+        if is_dark:
+            modern_reds = LinearSegmentedColormap.from_list('dark_reds', ['#4a2a2a', '#8a4a4a', '#cc7d7d'])
+        else:
+            modern_reds = LinearSegmentedColormap.from_list('modern_reds', ['#ffcdd2', '#ef5350', '#b71c1c'])
+        colors = modern_reds(norm(confmax)).tolist()
+        pal_heatmap = modern_reds
         plot_type = "Bottom"
         name = "Combo2"
 
-    # Generate frequency plot
+    # Generate frequency plot with modern styling
     plot = sns.countplot(y='Sci_Name', hue='Sci_Name', legend=False, data=df_plt_selection_today,
-                         palette=dict(zip(confmax.index, colors)), order=freq_order, ax=axs[0], edgecolor='lightgrey')
+                         palette=dict(zip(confmax.index, colors)), order=freq_order, ax=axs[0],
+                         edgecolor=bar_edge, linewidth=0.5)
 
-    # Prints Max Confidence on bars
-    show_values_on_bars(axs[0], confmax)
+    # Print count values next to bars (not on them)
+    show_values_on_bars(axs[0], confmax, is_dark)
 
-    # Try plot grid lines between bars - problem at the moment plots grid lines on bars - want between bars
+    # Style the bar chart axis
+    axs[0].spines['top'].set_visible(False)
+    axs[0].spines['right'].set_visible(False)
+    axs[0].spines['bottom'].set_color(grid_color)
+    axs[0].spines['left'].set_visible(False)
+    axs[0].tick_params(axis='y', length=0)
+    axs[0].tick_params(axis='x', colors=tick_color, labelsize=8)
+    axs[0].xaxis.label.set_color(tick_color)
+    axs[0].grid(axis='x', color=grid_color, linewidth=0.5, alpha=0.5)
+
+    # Set y-axis labels to common names
     names_key = df_plt_today.sort_values('Time', ascending=False).groupby('Sci_Name').first()['Com_Name']
     common_names = [names_key[tick_label.get_text()] for tick_label in plot.get_yticklabels()]
     yticklabels = ['\n'.join(textwrap.wrap(ticklabel, wrap_width(ticklabel))) for ticklabel in common_names]
-    # Next two lines avoid a UserWarning on set_ticklabels() requesting a fixed number of ticks
     yticks = plot.get_yticks()
     plot.set_yticks(yticks)
-    plot.set_yticklabels(yticklabels, fontsize=10)
+    plot.set_yticklabels(yticklabels, fontsize=10, color=text_color)
     plot.set(ylabel=None)
     plot.set(xlabel="Detections")
 
     # Generate crosstab matrix for heatmap plot
     heat = pd.crosstab(df_plt_selection_today['Sci_Name'], df_plt_selection_today['Hour of Day'])
 
-    # Order heatmap Birds by frequency of occurrance
+    # Order heatmap Birds by frequency of occurrence
     heat.index = pd.CategoricalIndex(heat.index, categories=freq_order)
     heat.sort_index(level=0, inplace=True)
 
     hours_in_day = pd.Series(data=range(0, 24))
     heat_frame = pd.DataFrame(data=0, index=heat.index, columns=hours_in_day)
     heat = (heat+heat_frame).fillna(0)
-    # mask out zeros, so they do not show up in the final plot. this happens when max count/h is one
     heat[heat == 0] = np.nan
 
-    # Generatie heatmap plot
-    plot = sns.heatmap(heat, norm=LogNorm(),  annot=True,  annot_kws={"fontsize": 7}, fmt="g", cmap=pal, square=False,
-                       cbar=False, linewidths=0.5, linecolor="Grey", ax=axs[1], yticklabels=False)
+    # Generate heatmap with modern styling
+    annot_color = text_color
+    heatmap = sns.heatmap(heat, norm=LogNorm(), annot=True,
+                          annot_kws={"fontsize": 7, "color": annot_color},
+                          fmt="g", cmap=pal_heatmap, square=False,
+                          cbar=False, linewidths=1.5, linecolor=facecolor,
+                          ax=axs[1], yticklabels=False)
 
-    # Set color and weight of tick label for current hour
-    for label in plot.get_xticklabels():
+    # Style heatmap axis
+    axs[1].spines['top'].set_visible(False)
+    axs[1].spines['right'].set_visible(False)
+    axs[1].spines['bottom'].set_visible(False)
+    axs[1].spines['left'].set_visible(False)
+    axs[1].tick_params(axis='x', colors=tick_color, labelsize=8)
+    axs[1].tick_params(axis='y', length=0)
+    axs[1].xaxis.label.set_color(tick_color)
+
+    # Highlight current hour
+    for label in heatmap.get_xticklabels():
         if int(label.get_text()) == now.hour:
-            if conf['COLOR_SCHEME'] == "dark":
-                label.set_color('white')
-            else:
-                label.set_color('yellow')
+            label.set_color(highlight_color)
+            label.set_fontweight('bold')
 
-    plot.set_xticklabels(plot.get_xticklabels(), rotation=0, size=8)
+    heatmap.set_xticklabels(heatmap.get_xticklabels(), rotation=0, size=8)
+    heatmap.set(ylabel=None)
+    heatmap.set(xlabel="Hour of Day")
 
-    # Set heatmap border
-    for _, spine in plot.spines.items():
-        spine.set_visible(True)
-
-    plot.set(ylabel=None)
-    plot.set(xlabel="Hour of Day")
-    # Set combined plot layout and titles
+    # Title
     y = 1 - 8 / (height * 100)
-    plt.suptitle(f"{plot_type} {readings} Last Updated: {now.strftime('%Y-%m-%d %H:%M')}", y=y)
+    plt.suptitle(f"{plot_type} {readings}  |  {now.strftime('%Y-%m-%d %H:%M')}",
+                 y=y, color=title_color, fontsize=11, fontweight='400')
     f.tight_layout()
     top = 1 - 40 / (height * 100)
-    f.subplots_adjust(left=0.125, right=0.9, top=top, wspace=0)
+    f.subplots_adjust(left=0.125, right=0.95, top=top, wspace=0.02)
 
-    # Save combined plot
+    # Save with transparency for dark mode, white bg for light
     save_name = os.path.expanduser(f"~/BirdSongs/Extracted/Charts/{name}-{now.strftime('%Y-%m-%d')}.png")
-    plt.savefig(save_name)
+    plt.savefig(save_name, facecolor=facecolor, edgecolor='none', dpi=120, bbox_inches='tight',
+                pad_inches=0.2)
     plt.show()
     plt.close()
 
@@ -198,11 +236,6 @@ def main(daemon, sleep_m):
     last_run = None
     while True:
         now = datetime.now()
-        # now = datetime.strptime('2023-12-13T23:59:59', "%Y-%m-%dT%H:%M:%S")
-        # now = datetime.strptime('2024-01-02T23:59:59', "%Y-%m-%dT%H:%M:%S")
-        # now = datetime.strptime('2024-02-26T23:59:59', "%Y-%m-%dT%H:%M:%S")
-        # now = datetime.strptime('2024-04-03T23:59:59', "%Y-%m-%dT%H:%M:%S")
-        # now = datetime.strptime('2024-04-07T23:59:59', "%Y-%m-%dT%H:%M:%S")
         if last_run and now.day != last_run.day:
             print("getting yesterday's dataset")
             yesterday = last_run.replace(hour=23, minute=59)

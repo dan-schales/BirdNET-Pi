@@ -1089,6 +1089,106 @@ pre#timer.bash {
    color: #e0e0e0;
 }
 
+/* ========== OVERVIEW STATS & CARDS ========== */
+.stats-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.stat-card {
+  background: #1e1e1e;
+  border-radius: 10px;
+  padding: 16px 20px;
+  min-width: 100px;
+  text-align: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.4);
+}
+
+.stat-card-compact {
+  padding: 10px 16px;
+  min-width: 80px;
+}
+
+.stat-value {
+  font-size: 1.6em;
+  font-weight: 700;
+  color: #7dcc8e;
+  line-height: 1.2;
+}
+
+.stat-label {
+  font-size: 0.8em;
+  color: #888;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-top: 2px;
+}
+
+.stat-link {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  width: 100%;
+}
+
+.stat-link:hover .stat-value {
+  color: #a3e0b0;
+}
+
+.overview-card {
+  background: #1e1e1e;
+  border-radius: 10px;
+  padding: 20px;
+  margin-bottom: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.overview-card h3 {
+  margin-top: 0;
+}
+
+.chart-card {
+  padding: 8px;
+  overflow: hidden;
+}
+
+.chart-card img {
+  border-radius: 8px;
+}
+
+.overview .chart img {
+  width: 100%;
+  height: auto;
+  border-radius: 8px;
+}
+
+@media screen and (max-width: 600px) {
+  .stats-grid {
+    gap: 6px;
+  }
+  .stat-card {
+    padding: 10px 12px;
+    min-width: 70px;
+  }
+  .stat-value {
+    font-size: 1.3em;
+  }
+  .stat-label {
+    font-size: 0.7em;
+  }
+}
+
 /* ========== LIVESTREAM VIEW ========== */
 .livestream-view {
   max-width: 800px;

@@ -156,31 +156,40 @@ if(isset($_GET['ajax_left_chart']) && $_GET['ajax_left_chart'] == "true") {
   $chart_data = get_summary();
   $_SESSION['chart_data'] = $chart_data;
 ?>
-<table>
-  <tr>
-    <th>Total</th>
-    <td><?php echo $chart_data['totalcount'];?></td>
-  </tr>
-  <tr>
-    <th>Today</th>
-    <td><form action="" method="GET"><button type="submit" name="view" value="Todays Detections"><?php echo $chart_data['todaycount'];?></button></td>
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-value"><?php echo $chart_data['totalcount'];?></div>
+    <div class="stat-label">Total</div>
+  </div>
+  <div class="stat-card">
+    <form action="" method="GET">
+      <button type="submit" name="view" value="Todays Detections" class="stat-link">
+        <div class="stat-value"><?php echo $chart_data['todaycount'];?></div>
+        <div class="stat-label">Today</div>
+      </button>
     </form>
-  </tr>
-  <tr>
-    <th>Last Hour</th>
-    <td><?php echo $chart_data['hourcount'];?></td>
-  </tr>
-  <tr>
-    <th>Species Detected Today</th>
-    <td><form action="" method="GET"><input type="hidden" name="view" value="Recordings"><button type="submit" name="date" value="<?php echo date('Y-m-d');?>"><?php echo $chart_data['speciestally'];?></button></td>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value"><?php echo $chart_data['hourcount'];?></div>
+    <div class="stat-label">Last Hour</div>
+  </div>
+  <div class="stat-card">
+    <form action="" method="GET"><input type="hidden" name="view" value="Recordings">
+      <button type="submit" name="date" value="<?php echo date('Y-m-d');?>" class="stat-link">
+        <div class="stat-value"><?php echo $chart_data['speciestally'];?></div>
+        <div class="stat-label">Species Today</div>
+      </button>
     </form>
-  </tr>
-  <tr>
-    <th>Total Number of Species</th>
-    <td><form action="" method="GET"><button type="submit" name="view" value="Species Stats"><?php echo $chart_data['totalspeciestally'];?></button></td>
+  </div>
+  <div class="stat-card">
+    <form action="" method="GET">
+      <button type="submit" name="view" value="Species Stats" class="stat-link">
+        <div class="stat-value"><?php echo $chart_data['totalspeciestally'];?></div>
+        <div class="stat-label">Total Species</div>
+      </button>
     </form>
-  </tr>
-</table>
+  </div>
+</div>
 <?php
   die();
 }
@@ -190,21 +199,40 @@ if(isset($_GET['ajax_center_chart']) && $_GET['ajax_center_chart'] == "true") {
   // Retrieve the cached data from session without regenerating
   $chart_data = $_SESSION['chart_data'];
 ?>
-  <table><tr>
-  <th>Total</th>
-  <th>Today</th>
-  <th>Last Hour</th>
-  <th>Species Total</th>
-  <th>Species Today</th>
-      </tr>
-      <tr>
-      <td><?php echo $chart_data['totalcount'];?></td>
-      <td><form action="" method="GET"><input type="hidden" name="view" value="Todays Detections"><?php echo $chart_data['todaycount'];?></td></form>
-      <td><?php echo $chart_data['hourcount'];?></td>
-      <td><form action="" method="GET"><button type="submit" name="view" value="Species Stats"><?php echo $chart_data['totalspeciestally'];?></button></td></form>
-      <td><form action="" method="GET"><input type="hidden" name="view" value="Recordings"><button type="submit" name="date" value="<?php echo date('Y-m-d');?>"><?php echo $chart_data['speciestally'];?></button></td></form>
-  </tr>
-  </table>
+<div class="stats-grid stats-grid-horizontal">
+  <div class="stat-card stat-card-compact">
+    <div class="stat-value"><?php echo $chart_data['totalcount'];?></div>
+    <div class="stat-label">Total</div>
+  </div>
+  <div class="stat-card stat-card-compact">
+    <form action="" method="GET"><input type="hidden" name="view" value="Todays Detections">
+      <button type="submit" class="stat-link">
+        <div class="stat-value"><?php echo $chart_data['todaycount'];?></div>
+        <div class="stat-label">Today</div>
+      </button>
+    </form>
+  </div>
+  <div class="stat-card stat-card-compact">
+    <div class="stat-value"><?php echo $chart_data['hourcount'];?></div>
+    <div class="stat-label">Last Hour</div>
+  </div>
+  <div class="stat-card stat-card-compact">
+    <form action="" method="GET">
+      <button type="submit" name="view" value="Species Stats" class="stat-link">
+        <div class="stat-value"><?php echo $chart_data['totalspeciestally'];?></div>
+        <div class="stat-label">Species Total</div>
+      </button>
+    </form>
+  </div>
+  <div class="stat-card stat-card-compact">
+    <form action="" method="GET"><input type="hidden" name="view" value="Recordings">
+      <button type="submit" name="date" value="<?php echo date('Y-m-d');?>" class="stat-link">
+        <div class="stat-value"><?php echo $chart_data['speciestally'];?></div>
+        <div class="stat-label">Species Today</div>
+      </button>
+    </form>
+  </div>
+</div>
 
 <?php
   die();
@@ -424,32 +452,37 @@ function display_species($species_list, $title, $show_last_seen=false) {
 display_species($new_species, 'New Species');
 display_species($rare_species, 'Rare Species', true);
 ?>
-<div class="chart">
-<?php
-$refresh = $config['RECORDING_LENGTH'];
-$dividedrefresh = $refresh/4;
-if($dividedrefresh < 1) { 
-  $dividedrefresh = 1;
-}
-$time = time();
-if (file_exists('./Charts/'.$chart)) {
-  echo "<img id='chart' src=\"Charts/$chart?nocache=$time\">";
-} 
-?>
+<div class="overview-card chart-card">
+  <div class="chart">
+  <?php
+  $refresh = $config['RECORDING_LENGTH'];
+  $dividedrefresh = $refresh/4;
+  if($dividedrefresh < 1) {
+    $dividedrefresh = 1;
+  }
+  $time = time();
+  if (file_exists('./Charts/'.$chart)) {
+    echo "<img id='chart' src=\"Charts/$chart?nocache=$time\">";
+  }
+  ?>
+  </div>
 </div>
 
 <div id="most_recent_detection"></div>
-<br>
-<h3>5 Most Recent Detections</h3>
-<div style="padding-bottom:10px;" id="detections_table"><h3>Loading...</h3></div>
 
-<h3>Currently Analyzing</h3>
-<?php
-$refresh = $config['RECORDING_LENGTH'];
-$time = time();
-echo "<img id=\"spectrogramimage\" src=\"spectrogram.png?nocache=$time\">";
+<div class="overview-card">
+  <h3>5 Most Recent Detections</h3>
+  <div style="padding-bottom:10px;" id="detections_table"><h3>Loading...</h3></div>
+</div>
 
-?>
+<div class="overview-card">
+  <h3>Currently Analyzing</h3>
+  <?php
+  $refresh = $config['RECORDING_LENGTH'];
+  $time = time();
+  echo "<img id=\"spectrogramimage\" src=\"spectrogram.png?nocache=$time\">";
+  ?>
+</div>
 
 <div id="customimage"></div>
 <br>

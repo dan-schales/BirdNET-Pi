@@ -3,7 +3,16 @@
 $requestUri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 
 if (strpos($requestUri, '/api/v1/') === 0) {
-  include_once 'scripts/api.php';
+  if (strpos($requestUri, '/api/v1/livestream/') === 0) {
+    include_once 'scripts/livestream_recording.php';
+  } else {
+    include_once 'scripts/api.php';
+  }
+  die();
+}
+
+if ($requestUri === '/livestream' || $requestUri === '/livestream/') {
+  include_once 'livestream.php';
   die();
 }
 
@@ -46,9 +55,10 @@ if(isset($_GET['stream'])){
   </div><div class=\"centered\"><h3>$site_name</h3></div>";
 } else {
     echo "
-  <form action=\"index.php\" method=\"GET\">
+  <form action=\"index.php\" method=\"GET\" style=\"display:inline\">
     <button type=\"submit\" name=\"stream\" value=\"play\">Live Audio</button>
   </form>
+  <a href=\"/livestream\"><button type=\"button\">Livestream Studio</button></a>
   </div>
   <h1><a href=\"/\"><img class=\"topimage\" src=\"images/bnp.png\"></a></h1>
 </div><div class=\"centered\"><h3>$site_name</h3></div>";

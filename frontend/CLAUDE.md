@@ -37,7 +37,7 @@ frontend/
 │   │   ├── History.svelte       # Date picker, hourly chart + detection list for selected date
 │   │   ├── WeeklyReport.svelte  # This week vs last week comparison table
 │   │   ├── Recordings.svelte    # Date-based recording list, group by species toggle
-│   │   ├── Livestream.svelte    # Icecast2 audio player with LIVE indicator
+│   │   ├── Livestream.svelte    # Icecast2 audio player + stream recording (start/stop/list/download/delete)
 │   │   └── Settings.svelte      # Read-only config display, links to external tools
 │   └── lib/
 │       ├── api.js               # REST client (26 endpoints) + WebSocket connection

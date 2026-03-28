@@ -5,6 +5,8 @@ import re
 import sqlite3
 import json
 import asyncio
+import subprocess
+import signal
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -29,6 +31,8 @@ LABELS_PATH = os.path.join(BASE_PATH, "model", "l18n", "labels_en.json")
 
 # Sensitive config keys to exclude from public API
 SENSITIVE_KEYS = {"CADDY_PWD", "FLICKR_API_KEY", "FLICKR_FILTER_EMAIL", "BIRDWEATHER_ID"}
+RECORDINGS_DIR = os.path.join(USER_HOME, "BirdSongs", "LivestreamRecordings")
+RECORDING_PID_FILE = "/tmp/livestream_recording.pid"
 
 
 # --- Database helpers ---
@@ -446,6 +450,158 @@ def api_dates():
         "GROUP BY Date ORDER BY Date DESC LIMIT 365"
     )
     return rows
+
+
+# --- Livestream recording ---
+
+def _format_bytes(size):
+    if size == 0:
+        return "0 B"
+    for unit in ('B', 'KB', 'MB', 'GB'):
+        if size < 1024:
+            return f"{size:.2f} {unit}" if unit != 'B' else f"{size} B"
+        size /= 1024
+    return f"{size:.2f} TB"
+
+
+def _is_recording():
+    """Check if livestream recording is in progress."""
+    if not os.path.exists(RECORDING_PID_FILE):
+        return False, None, None, None
+    try:
+        with open(RECORDING_PID_FILE) as f:
+            data = f.read().strip().split('\n')
+        pid = int(data[0])
+        filename = data[1] if len(data) > 1 else 'unknown'
+        started = float(data[2]) if len(data) > 2 else 0
+        os.kill(pid, 0)
+        return True, pid, filename, started
+    except (ProcessLookupError, ValueError, PermissionError, OSError):
+        try:
+            os.unlink(RECORDING_PID_FILE)
+        except OSError:
+            pass
+        return False, None, None, None
+
+
+@app.post("/api/v2/livestream/record/start")
+async def api_livestream_start(request: Request):
+    recording, _, _, _ = _is_recording()
+    if recording:
+        raise HTTPException(409, "Recording already in progress")
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    prefix = re.sub(r'[^a-zA-Z0-9_-]', '', body.get('prefix', '')) or 'livestream'
+
+    timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+    filename = f"{prefix}_{timestamp}.mp3"
+    filepath = os.path.join(RECORDINGS_DIR, filename)
+    os.makedirs(RECORDINGS_DIR, exist_ok=True)
+
+    ice_pwd = SETTINGS.get('ICE_PWD', 'birdnetpi')
+    try:
+        proc = subprocess.Popen(
+            ['ffmpeg', '-nostdin', '-loglevel', 'error',
+             '-i', f'http://source:{ice_pwd}@localhost:8000/stream',
+             '-acodec', 'copy', filepath],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+    except FileNotFoundError:
+        raise HTTPException(500, "ffmpeg not found on this system")
+
+    with open(RECORDING_PID_FILE, 'w') as f:
+        f.write(f"{proc.pid}\n{filename}\n{datetime.now().timestamp()}")
+
+    return {"status": "success", "message": "Recording started",
+            "data": {"filename": filename, "pid": proc.pid}}
+
+
+@app.post("/api/v2/livestream/record/stop")
+async def api_livestream_stop():
+    recording, pid, filename, _ = _is_recording()
+    if not recording:
+        raise HTTPException(404, "No recording in progress")
+
+    try:
+        os.kill(pid, signal.SIGINT)
+        await asyncio.sleep(0.5)
+        try:
+            os.kill(pid, 0)
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+    except ProcessLookupError:
+        pass
+
+    try:
+        os.unlink(RECORDING_PID_FILE)
+    except OSError:
+        pass
+
+    filepath = os.path.join(RECORDINGS_DIR, filename)
+    filesize = os.path.getsize(filepath) if os.path.exists(filepath) else 0
+
+    return {"status": "success", "message": "Recording stopped",
+            "data": {"filename": filename, "filesize": filesize,
+                     "filesize_human": _format_bytes(filesize)}}
+
+
+@app.get("/api/v2/livestream/record/status")
+def api_livestream_status():
+    recording, pid, filename, started = _is_recording()
+    if not recording:
+        return {"status": "success", "recording": False}
+
+    filepath = os.path.join(RECORDINGS_DIR, filename)
+    filesize = os.path.getsize(filepath) if os.path.exists(filepath) else 0
+
+    return {"status": "success", "recording": True, "data": {
+        "filename": filename, "pid": pid, "filesize": filesize,
+        "filesize_human": _format_bytes(filesize),
+        "duration_seconds": int(datetime.now().timestamp() - started) if started else 0
+    }}
+
+
+@app.get("/api/v2/livestream/recordings")
+def api_livestream_recordings():
+    if not os.path.isdir(RECORDINGS_DIR):
+        return {"status": "success", "data": []}
+    recs = []
+    for f in sorted(Path(RECORDINGS_DIR).glob("*.mp3"),
+                    key=lambda p: p.stat().st_mtime, reverse=True):
+        st = f.stat()
+        recs.append({
+            "filename": f.name,
+            "filesize": st.st_size,
+            "filesize_human": _format_bytes(st.st_size),
+            "created": datetime.fromtimestamp(st.st_mtime).strftime('%Y-%m-%d %H:%M:%S'),
+            "duration_seconds": int(st.st_size / 40000),
+        })
+    return {"status": "success", "data": recs}
+
+
+@app.get("/api/v2/livestream/recordings/{filename}")
+def api_livestream_download(filename: str):
+    if not re.match(r'^[a-zA-Z0-9_.-]+\.mp3$', filename):
+        raise HTTPException(400, "Invalid filename")
+    filepath = os.path.join(RECORDINGS_DIR, filename)
+    if not os.path.exists(filepath):
+        raise HTTPException(404, "Recording not found")
+    return FileResponse(filepath, media_type="audio/mpeg", filename=filename)
+
+
+@app.delete("/api/v2/livestream/recordings/{filename}")
+def api_livestream_delete(filename: str):
+    if not re.match(r'^[a-zA-Z0-9_.-]+\.mp3$', filename):
+        raise HTTPException(400, "Invalid filename")
+    filepath = os.path.join(RECORDINGS_DIR, filename)
+    if not os.path.exists(filepath):
+        raise HTTPException(404, "Recording not found")
+    os.unlink(filepath)
+    return {"status": "success", "message": "Recording deleted"}
 
 
 # --- WebSocket ---

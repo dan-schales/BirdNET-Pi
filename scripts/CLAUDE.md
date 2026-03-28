@@ -48,6 +48,12 @@ GET  /weekly-report              - Week-over-week comparison
 GET  /recordings?date=           - Recording file list by date
 GET  /config                     - Settings (sensitive keys filtered out)
 GET  /dates                      - Available recording dates
+POST /livestream/record/start    - Start recording livestream (ffmpeg from Icecast)
+POST /livestream/record/stop     - Stop recording (SIGINT/SIGKILL)
+GET  /livestream/record/status   - Recording status (filename, size, duration)
+GET  /livestream/recordings      - List saved MP3 recordings
+GET  /livestream/recordings/{f}  - Download a recording
+DEL  /livestream/recordings/{f}  - Delete a recording
 WS   /ws/detections              - Real-time detection stream (polls every 3s)
 
 GET  /api/v1/image/{sci_name}    - Species image URL (Wikipedia/Flickr cache)

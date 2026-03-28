@@ -80,6 +80,8 @@ BirdNET-Pi/
 ~/BirdSongs/Extracted/        # Extracted clips organized by date/species
 ~/BirdSongs/Extracted/Charts/ # Daily PNG charts (Combo-YYYY-MM-DD.png)
 ~/BirdSongs/Extracted/By_Date/{date}/{species}/ # Audio + spectrograms
+~/BirdSongs/LivestreamRecordings/ # User-initiated livestream recordings (MP3)
+/tmp/livestream_recording.pid     # Active recording PID + filename + start time
 ```
 
 ## Database Schema

@@ -3,8 +3,9 @@
 set -e
 
 source /etc/birdnet/birdnet.conf
+BIRDNET_HOME=$(getent passwd "${BIRDNET_USER}" | cut -d: -f6)
 
-BIRDNET_DIR="$HOME/BirdNET-Pi"
+BIRDNET_DIR="${BIRDNET_HOME}/BirdNET-Pi"
 VENV="$BIRDNET_DIR/birdnet"
 
 echo "=== BirdNET-Pi Frontend Setup ==="
@@ -17,7 +18,7 @@ echo "  Done."
 
 # 2. Install the systemd service
 echo "[2/4] Setting up API service..."
-sed "s|BIRDNET_USER_PLACEHOLDER|$USER|g; s|HOME_PLACEHOLDER|$HOME|g" \
+sed "s|BIRDNET_USER_PLACEHOLDER|${BIRDNET_USER}|g; s|HOME_PLACEHOLDER|${BIRDNET_HOME}|g" \
   "$BIRDNET_DIR/templates/birdnet_api.service" \
   | sudo tee /etc/systemd/system/birdnet_api.service > /dev/null
 

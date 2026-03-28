@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 source /etc/birdnet/birdnet.conf
-my_dir=$HOME/BirdNET-Pi/scripts
-FRONTEND_DIR=$HOME/BirdNET-Pi/frontend/dist
+BIRDNET_HOME=$(getent passwd "${BIRDNET_USER}" | cut -d: -f6)
+my_dir=${BIRDNET_HOME}/BirdNET-Pi/scripts
+FRONTEND_DIR=${BIRDNET_HOME}/BirdNET-Pi/frontend/dist
 set -x
 [ -d /etc/caddy ] || mkdir /etc/caddy
 if [ -f /etc/caddy/Caddyfile ];then

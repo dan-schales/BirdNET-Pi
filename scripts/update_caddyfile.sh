@@ -11,71 +11,82 @@ if ! [ -z ${CADDY_PWD} ];then
 HASHWORD=$(caddy hash-password --plaintext ${CADDY_PWD})
 cat << EOF > /etc/caddy/Caddyfile
 http:// ${BIRDNETPI_URL} {
-  # API server (matched first — most specific)
-  handle /api/* {
+  # API server
+  @api path /api/*
+  handle @api {
     reverse_proxy localhost:7007
   }
 
   # Static bird data files
-  handle /By_Date/* {
+  @bydate path /By_Date/*
+  handle @bydate {
     root * ${EXTRACTED}
     file_server browse
   }
-  handle /Charts/* {
+  @charts path /Charts/*
+  handle @charts {
     root * ${EXTRACTED}
     file_server browse
   }
 
   # Authenticated routes
-  handle /Processed* {
+  @processed path /Processed*
+  handle @processed {
     basicauth {
       birdnet ${HASHWORD}
     }
     root * ${EXTRACTED}
     file_server browse
   }
-  handle /scripts* {
+  @adminscripts path /scripts*
+  handle @adminscripts {
     basicauth {
       birdnet ${HASHWORD}
     }
     root * ${EXTRACTED}
     php_fastcgi unix//run/php/php-fpm.sock
   }
-  handle /phpsysinfo* {
+  @sysinfo path /phpsysinfo*
+  handle @sysinfo {
     basicauth {
       birdnet ${HASHWORD}
     }
     root * ${EXTRACTED}
     file_server browse
   }
-  handle /terminal* {
+  @terminal path /terminal*
+  handle @terminal {
     basicauth {
       birdnet ${HASHWORD}
     }
     reverse_proxy localhost:8888
   }
-
-  # Proxied services
-  handle /stream {
+  @stream path /stream
+  handle @stream {
     basicauth {
       birdnet ${HASHWORD}
     }
     reverse_proxy localhost:8000
   }
-  handle /log* {
+
+  # Proxied services
+  @log path /log*
+  handle @log {
     reverse_proxy localhost:8080
   }
-  handle /stats* {
+  @stats path /stats*
+  handle @stats {
     reverse_proxy localhost:8501
   }
 
-  # Legacy PHP (views.php, etc.)
-  handle /views.php* {
+  # Legacy PHP
+  @legacyphp path /views.php*
+  handle @legacyphp {
     root * ${EXTRACTED}
     php_fastcgi unix//run/php/php-fpm.sock
   }
 
-  # SPA frontend — catch-all (must be last)
+  # SPA frontend — catch-all fallback
   handle {
     root * ${FRONTEND_DIR}
     try_files {path} /index.html
@@ -87,41 +98,49 @@ else
   cat << EOF > /etc/caddy/Caddyfile
 http:// ${BIRDNETPI_URL} {
   # API server
-  handle /api/* {
+  @api path /api/*
+  handle @api {
     reverse_proxy localhost:7007
   }
 
   # Static bird data files
-  handle /By_Date/* {
+  @bydate path /By_Date/*
+  handle @bydate {
     root * ${EXTRACTED}
     file_server browse
   }
-  handle /Charts/* {
+  @charts path /Charts/*
+  handle @charts {
     root * ${EXTRACTED}
     file_server browse
   }
 
   # Proxied services
-  handle /stream {
+  @stream path /stream
+  handle @stream {
     reverse_proxy localhost:8000
   }
-  handle /log* {
+  @log path /log*
+  handle @log {
     reverse_proxy localhost:8080
   }
-  handle /stats* {
+  @stats path /stats*
+  handle @stats {
     reverse_proxy localhost:8501
   }
-  handle /terminal* {
+  @terminal path /terminal*
+  handle @terminal {
     reverse_proxy localhost:8888
   }
 
   # Legacy PHP
-  handle /views.php* {
+  @legacyphp path /views.php*
+  handle @legacyphp {
     root * ${EXTRACTED}
     php_fastcgi unix//run/php/php-fpm.sock
   }
 
-  # SPA frontend — catch-all (must be last)
+  # SPA frontend — catch-all fallback
   handle {
     root * ${FRONTEND_DIR}
     try_files {path} /index.html

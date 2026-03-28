@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 source /etc/birdnet/birdnet.conf
 my_dir=$HOME/BirdNET-Pi/scripts
+FRONTEND_DIR=$HOME/BirdNET-Pi/frontend/dist
 set -x
 [ -d /etc/caddy ] || mkdir /etc/caddy
 if [ -f /etc/caddy/Caddyfile ];then
@@ -10,6 +11,28 @@ if ! [ -z ${CADDY_PWD} ];then
 HASHWORD=$(caddy hash-password --plaintext ${CADDY_PWD})
 cat << EOF > /etc/caddy/Caddyfile
 http:// ${BIRDNETPI_URL} {
+  # New SPA frontend
+  handle / {
+    root * ${FRONTEND_DIR}
+    try_files {path} /index.html
+    file_server
+  }
+  handle /assets/* {
+    root * ${FRONTEND_DIR}
+    file_server
+  }
+
+  # API server
+  handle /api/* {
+    reverse_proxy localhost:7007
+  }
+
+  # WebSocket support for API
+  handle /api/v2/ws/* {
+    reverse_proxy localhost:7007
+  }
+
+  # Static bird data files
   root * ${EXTRACTED}
   file_server browse
   handle /By_Date/* {
@@ -17,9 +40,6 @@ http:// ${BIRDNETPI_URL} {
   }
   handle /Charts/* {
     file_server browse
-  }
-  basicauth /views.php?view=File* {
-    birdnet ${HASHWORD}
   }
   basicauth /Processed* {
     birdnet ${HASHWORD}
@@ -46,6 +66,28 @@ EOF
 else
   cat << EOF > /etc/caddy/Caddyfile
 http:// ${BIRDNETPI_URL} {
+  # New SPA frontend
+  handle / {
+    root * ${FRONTEND_DIR}
+    try_files {path} /index.html
+    file_server
+  }
+  handle /assets/* {
+    root * ${FRONTEND_DIR}
+    file_server
+  }
+
+  # API server
+  handle /api/* {
+    reverse_proxy localhost:7007
+  }
+
+  # WebSocket support for API
+  handle /api/v2/ws/* {
+    reverse_proxy localhost:7007
+  }
+
+  # Static bird data files
   root * ${EXTRACTED}
   file_server browse
   handle /By_Date/* {

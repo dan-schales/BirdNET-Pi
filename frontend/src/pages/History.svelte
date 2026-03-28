@@ -10,12 +10,12 @@
   let dates = $state([]);
   let loading = $state(true);
 
-  async function load() {
+  async function load(date) {
     loading = true;
     try {
       const [h, d] = await Promise.all([
-        api.getDetectionsHourly(selectedDate),
-        api.getDetectionsHistory(selectedDate, 300),
+        api.getDetectionsHourly(date),
+        api.getDetectionsHistory(date, 300),
       ]);
       hourlyData = h;
       detections = d;
@@ -26,16 +26,21 @@
     }
   }
 
-  $effect(() => { selectedDate; load(); });
-
   onMount(async () => {
+    load(selectedDate);
     dates = await api.getDates();
   });
+
+  function onDateChange(e) {
+    selectedDate = e.target.value;
+    load(selectedDate);
+  }
 
   function prevDay() {
     const d = new Date(selectedDate);
     d.setDate(d.getDate() - 1);
     selectedDate = d.toISOString().split('T')[0];
+    load(selectedDate);
   }
 
   function nextDay() {
@@ -43,7 +48,10 @@
     d.setDate(d.getDate() + 1);
     const today = new Date().toISOString().split('T')[0];
     const next = d.toISOString().split('T')[0];
-    if (next <= today) selectedDate = next;
+    if (next <= today) {
+      selectedDate = next;
+      load(selectedDate);
+    }
   }
 
   function totalForDay() {
@@ -63,7 +71,8 @@
       </button>
       <input
         type="date"
-        bind:value={selectedDate}
+        value={selectedDate}
+        onchange={onDateChange}
         max={new Date().toISOString().split('T')[0]}
         class="px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
       />

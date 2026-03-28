@@ -8,10 +8,10 @@
   let loading = $state(true);
   let groupBySpecies = $state(true);
 
-  async function load() {
+  async function load(date) {
     loading = true;
     try {
-      recordings = await api.getRecordings(selectedDate);
+      recordings = await api.getRecordings(date);
     } catch (e) {
       console.error(e);
     } finally {
@@ -19,8 +19,12 @@
     }
   }
 
-  $effect(() => { selectedDate; load(); });
-  onMount(load);
+  function onDateChange(e) {
+    selectedDate = e.target.value;
+    load(selectedDate);
+  }
+
+  onMount(() => load(selectedDate));
 
   let grouped = $derived.by(() => {
     if (!groupBySpecies) return { 'All Recordings': recordings };
@@ -50,7 +54,8 @@
     <div class="flex gap-2">
       <input
         type="date"
-        bind:value={selectedDate}
+        value={selectedDate}
+        onchange={onDateChange}
         max={new Date().toISOString().split('T')[0]}
         class="px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
       />

@@ -4,7 +4,6 @@
   import DetectionCard from '../components/DetectionCard.svelte';
 
   let detections = $state([]);
-  let filtered = $state([]);
   let search = $state('');
   let sortBy = $state('time');
   let loading = $state(true);
@@ -20,7 +19,7 @@
     }
   }
 
-  $effect(() => {
+  let filtered = $derived.by(() => {
     let list = detections;
     if (search) {
       const q = search.toLowerCase();
@@ -31,7 +30,7 @@
     } else if (sortBy === 'species') {
       list = [...list].sort((a, b) => a.com_name.localeCompare(b.com_name));
     }
-    filtered = list;
+    return list;
   });
 
   onMount(() => {

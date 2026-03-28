@@ -4,15 +4,15 @@
   import SpeciesCard from '../components/SpeciesCard.svelte';
 
   let species = $state([]);
-  let filtered = $state([]);
   let search = $state('');
   let sortBy = $state('occurrences');
   let loading = $state(true);
+  let prevSort = 'occurrences';
 
-  async function load() {
+  async function load(sort) {
     loading = true;
     try {
-      species = await api.getSpecies(sortBy);
+      species = await api.getSpecies(sort);
     } catch (e) {
       console.error(e);
     } finally {
@@ -20,22 +20,18 @@
     }
   }
 
-  $effect(() => {
-    if (search) {
-      const q = search.toLowerCase();
-      filtered = species.filter(s => s.Com_Name.toLowerCase().includes(q) || s.Sci_Name.toLowerCase().includes(q));
-    } else {
-      filtered = species;
-    }
+  function onSortChange(e) {
+    sortBy = e.target.value;
+    load(sortBy);
+  }
+
+  let filtered = $derived.by(() => {
+    if (!search) return species;
+    const q = search.toLowerCase();
+    return species.filter(s => s.Com_Name.toLowerCase().includes(q) || s.Sci_Name.toLowerCase().includes(q));
   });
 
-  $effect(() => {
-    // Re-fetch when sort changes
-    sortBy;
-    load();
-  });
-
-  onMount(load);
+  onMount(() => load(sortBy));
 </script>
 
 <div class="space-y-4">
@@ -51,7 +47,7 @@
         bind:value={search}
         class="px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none"
       />
-      <select bind:value={sortBy} class="px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+      <select value={sortBy} onchange={onSortChange} class="px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
         <option value="occurrences">Most Detected</option>
         <option value="confidence">Highest Confidence</option>
         <option value="date">Most Recent</option>

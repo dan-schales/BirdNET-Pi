@@ -12,7 +12,7 @@
   let trendDays = $state(30);
   let loading = $state(true);
   let chartCanvas = $state(null);
-  let chartInstance = $state(null);
+  let chartInstance = null;
   let page = $state(0);
 
   $effect(() => {

@@ -4,7 +4,7 @@
 
   let { data = [], title = "Today's Detections by Hour" } = $props();
   let canvas = $state(null);
-  let chart = $state(null);
+  let chart = null;
 
   function getGradient(ctx) {
     const gradient = ctx.createLinearGradient(0, 0, 0, ctx.canvas.height);

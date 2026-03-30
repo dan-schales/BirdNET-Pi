@@ -22,7 +22,7 @@
     },
     {
       title: 'Detection',
-      fields: ['MODEL', 'CONFIDENCE', 'SENSITIVITY', 'OVERLAP', 'SF_THRESH'],
+      fields: ['MODEL', 'CONFIDENCE', 'SENSITIVITY', 'OVERLAP', 'SF_THRESH', 'PRIVACY_THRESHOLD', 'DETECT_HUMANS'],
     },
     {
       title: 'Recording',

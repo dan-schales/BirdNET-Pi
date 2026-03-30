@@ -160,6 +160,19 @@ if (isset($_GET["max_files_species"])) {
     }
   }
 
+  if(isset($_GET["detect_humans"])) {
+    $detect_humans = $_GET["detect_humans"];
+  } else {
+    $detect_humans = "0";
+  }
+  if(strcmp($detect_humans,$config['DETECT_HUMANS'] ?? '0') !== 0) {
+    if(preg_match("/DETECT_HUMANS=.*/", $contents)) {
+      $contents = preg_replace("/DETECT_HUMANS=.*/", "DETECT_HUMANS=$detect_humans", $contents);
+    } else {
+      $contents = preg_replace("/(PRIVACY_THRESHOLD=.*)/", "$1\nDETECT_HUMANS=$detect_humans", $contents);
+    }
+  }
+
   if(isset($_GET["rec_card"])) {
     $rec_card = $_GET["rec_card"];
     if(strcmp($rec_card,$config['REC_CARD']) !== 0) {
@@ -312,7 +325,15 @@ $newconfig = get_config();
       </script>
       <p>If a Human is predicted anywhere among the top <span id="predictionCount"><?php echo intval(max(10, ($newconfig['PRIVACY_THRESHOLD'] * $count)/100)); ?></span> predictions, the sample will be considered of human origin and no data will be collected. Start with 1% and move up as needed.</p>
       </td></tr></table><br>
-      
+
+      <table class="settingstable"><tr><td>
+      <h2>Human Detection</h2>
+      <label for="detect_humans">
+      <input name="detect_humans" type="checkbox" id="detect_humans" value="1" <?php if (($newconfig['DETECT_HUMANS'] ?? '0') == '1') { echo "checked"; }?>>
+      Save human sound detections</label>
+      <p>When enabled, human sounds (Human vocal, Human non-vocal, Human whistle) detected by BirdNET are saved to the database as regular detections instead of being filtered out by the privacy threshold. Human detections are excluded from BirdWeather uploads.</p>
+      </td></tr></table><br>
+
       <table class="settingstable"><tr><td>
       <h2>Disk Management</h2>
       <label for="purge">

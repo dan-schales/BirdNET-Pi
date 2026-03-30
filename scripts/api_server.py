@@ -464,29 +464,99 @@ def _format_bytes(size):
     return f"{size:.2f} TB"
 
 
+RECORDING_STDERR_FILE = "/tmp/livestream_recording.stderr"
+
+# Active timer-stop tasks keyed by PID file; allows cancellation on manual stop
+_recording_timer_tasks = {}
+
+
 def _is_recording():
     """Check if livestream recording is in progress."""
     if not os.path.exists(RECORDING_PID_FILE):
-        return False, None, None, None
+        return False, None, None, None, None
     try:
         with open(RECORDING_PID_FILE) as f:
             data = f.read().strip().split('\n')
         pid = int(data[0])
         filename = data[1] if len(data) > 1 else 'unknown'
         started = float(data[2]) if len(data) > 2 else 0
+        max_duration = int(data[3]) if len(data) > 3 else 0
         os.kill(pid, 0)
-        return True, pid, filename, started
+        return True, pid, filename, started, max_duration
     except (ProcessLookupError, ValueError, PermissionError, OSError):
         try:
             os.unlink(RECORDING_PID_FILE)
         except OSError:
             pass
-        return False, None, None, None
+        return False, None, None, None, None
+
+
+def _get_recording_error():
+    """Read any ffmpeg stderr output for error reporting."""
+    try:
+        if os.path.exists(RECORDING_STDERR_FILE):
+            with open(RECORDING_STDERR_FILE) as f:
+                return f.read().strip()
+    except OSError:
+        pass
+    return ""
+
+
+def _cleanup_recording_files():
+    """Remove PID and stderr files."""
+    for path in (RECORDING_PID_FILE, RECORDING_STDERR_FILE):
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+
+
+async def _auto_stop_recording(duration_seconds):
+    """Background task that stops the recording after the timer expires."""
+    try:
+        await asyncio.sleep(duration_seconds)
+        recording, pid, filename, _, _ = _is_recording()
+        if not recording:
+            return
+        try:
+            os.kill(pid, signal.SIGINT)
+            await asyncio.sleep(1.0)
+            try:
+                os.kill(pid, 0)
+                os.kill(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        except ProcessLookupError:
+            pass
+        _cleanup_recording_files()
+    except asyncio.CancelledError:
+        pass
+    finally:
+        _recording_timer_tasks.pop(RECORDING_PID_FILE, None)
+
+
+def _build_ffmpeg_cmd(duration, filepath):
+    """Build the ffmpeg command for recording the Icecast stream."""
+    cmd = ['ffmpeg', '-nostdin', '-loglevel', 'error',
+           '-i', 'http://localhost:8000/stream', '-c:a', 'copy']
+    if duration > 0:
+        cmd.extend(['-t', str(duration)])
+    cmd.append(filepath)
+    return cmd
+
+
+def _parse_duration(raw):
+    """Parse and clamp a duration value to a non-negative integer."""
+    try:
+        val = int(raw)
+        return max(val, 0)
+    except (TypeError, ValueError):
+        return 0
 
 
 @app.post("/api/v2/livestream/record/start")
 async def api_livestream_start(request: Request):
-    recording, _, _, _ = _is_recording()
+    recording, _, _, _, _ = _is_recording()
     if recording:
         raise HTTPException(409, "Recording already in progress")
 
@@ -495,39 +565,69 @@ async def api_livestream_start(request: Request):
     except Exception:
         body = {}
     prefix = re.sub(r'[^a-zA-Z0-9_-]', '', body.get('prefix', '')) or 'livestream'
+    duration = _parse_duration(body.get('duration', 0))
 
     timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
     filename = f"{prefix}_{timestamp}.mp3"
     filepath = os.path.join(RECORDINGS_DIR, filename)
     os.makedirs(RECORDINGS_DIR, exist_ok=True)
 
-    ice_pwd = SETTINGS.get('ICE_PWD', 'birdnetpi')
+    ffmpeg_cmd = _build_ffmpeg_cmd(duration, filepath)
+    stderr_fh = open(RECORDING_STDERR_FILE, 'w')
     try:
         proc = subprocess.Popen(
-            ['ffmpeg', '-nostdin', '-loglevel', 'error',
-             '-i', f'http://source:{ice_pwd}@localhost:8000/stream',
-             '-acodec', 'copy', filepath],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            ffmpeg_cmd,
+            stdout=subprocess.DEVNULL, stderr=stderr_fh
         )
     except FileNotFoundError:
+        stderr_fh.close()
         raise HTTPException(500, "ffmpeg not found on this system")
 
+    # Verify ffmpeg is actually running after a brief delay
+    await asyncio.sleep(0.5)
+    ret = proc.poll()
+    if ret is not None:
+        stderr_fh.close()
+        error_msg = _get_recording_error()
+        _cleanup_recording_files()
+        if os.path.exists(filepath):
+            try:
+                os.unlink(filepath)
+            except OSError:
+                pass
+        detail = f"ffmpeg exited immediately (code {ret})"
+        if error_msg:
+            detail += f": {error_msg}"
+        raise HTTPException(500, detail)
+
     with open(RECORDING_PID_FILE, 'w') as f:
-        f.write(f"{proc.pid}\n{filename}\n{datetime.now().timestamp()}")
+        f.write(f"{proc.pid}\n{filename}\n{datetime.now().timestamp()}\n{duration}")
+
+    # Schedule auto-stop if timer duration is set (as a server-side backup;
+    # ffmpeg -t handles the actual cutoff, but this cleans up the PID file)
+    if duration > 0:
+        task = asyncio.create_task(_auto_stop_recording(duration + 5))
+        _recording_timer_tasks[RECORDING_PID_FILE] = task
 
     return {"status": "success", "message": "Recording started",
-            "data": {"filename": filename, "pid": proc.pid}}
+            "data": {"filename": filename, "pid": proc.pid,
+                     "duration": duration}}
 
 
 @app.post("/api/v2/livestream/record/stop")
 async def api_livestream_stop():
-    recording, pid, filename, _ = _is_recording()
+    recording, pid, filename, _, _ = _is_recording()
     if not recording:
         raise HTTPException(404, "No recording in progress")
 
+    # Cancel any pending timer task
+    timer_task = _recording_timer_tasks.pop(RECORDING_PID_FILE, None)
+    if timer_task:
+        timer_task.cancel()
+
     try:
         os.kill(pid, signal.SIGINT)
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(1.0)
         try:
             os.kill(pid, 0)
             os.kill(pid, signal.SIGKILL)
@@ -536,10 +636,7 @@ async def api_livestream_stop():
     except ProcessLookupError:
         pass
 
-    try:
-        os.unlink(RECORDING_PID_FILE)
-    except OSError:
-        pass
+    _cleanup_recording_files()
 
     filepath = os.path.join(RECORDINGS_DIR, filename)
     filesize = os.path.getsize(filepath) if os.path.exists(filepath) else 0
@@ -551,18 +648,30 @@ async def api_livestream_stop():
 
 @app.get("/api/v2/livestream/record/status")
 def api_livestream_status():
-    recording, pid, filename, started = _is_recording()
+    recording, pid, filename, started, max_duration = _is_recording()
     if not recording:
+        # Check if ffmpeg exited with errors since last check
+        error_msg = _get_recording_error()
+        if error_msg:
+            _cleanup_recording_files()
+            return {"status": "success", "recording": False,
+                    "error": error_msg}
         return {"status": "success", "recording": False}
 
     filepath = os.path.join(RECORDINGS_DIR, filename)
     filesize = os.path.getsize(filepath) if os.path.exists(filepath) else 0
+    elapsed = int(datetime.now().timestamp() - started) if started else 0
 
-    return {"status": "success", "recording": True, "data": {
+    data = {
         "filename": filename, "pid": pid, "filesize": filesize,
         "filesize_human": _format_bytes(filesize),
-        "duration_seconds": int(datetime.now().timestamp() - started) if started else 0
-    }}
+        "duration_seconds": elapsed,
+    }
+    if max_duration and max_duration > 0:
+        data["max_duration"] = max_duration
+        data["remaining_seconds"] = max(0, max_duration - elapsed)
+
+    return {"status": "success", "recording": True, "data": data}
 
 
 @app.get("/api/v2/livestream/recordings")
@@ -591,6 +700,37 @@ def api_livestream_download(filename: str):
     if not os.path.exists(filepath):
         raise HTTPException(404, "Recording not found")
     return FileResponse(filepath, media_type="audio/mpeg", filename=filename)
+
+
+@app.patch("/api/v2/livestream/recordings/{filename}")
+async def api_livestream_rename(filename: str, request: Request):
+    if not re.match(r'^[a-zA-Z0-9_.-]+\.mp3$', filename):
+        raise HTTPException(400, "Invalid filename")
+    filepath = os.path.join(RECORDINGS_DIR, filename)
+    if not os.path.exists(filepath):
+        raise HTTPException(404, "Recording not found")
+
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Invalid request body")
+
+    new_name = body.get('filename', '')
+    if not new_name:
+        raise HTTPException(400, "New filename is required")
+    # Ensure .mp3 extension
+    if not new_name.endswith('.mp3'):
+        new_name += '.mp3'
+    if not re.match(r'^[a-zA-Z0-9_.-]+\.mp3$', new_name):
+        raise HTTPException(400, "Invalid new filename (alphanumeric, underscore, hyphen, dot only)")
+
+    new_path = os.path.join(RECORDINGS_DIR, new_name)
+    if os.path.exists(new_path):
+        raise HTTPException(409, "A recording with that name already exists")
+
+    os.rename(filepath, new_path)
+    return {"status": "success", "message": "Recording renamed",
+            "data": {"old_filename": filename, "new_filename": new_name}}
 
 
 @app.delete("/api/v2/livestream/recordings/{filename}")

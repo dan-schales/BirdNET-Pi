@@ -536,12 +536,22 @@ async def _auto_stop_recording(duration_seconds):
 
 
 def _build_ffmpeg_cmd(duration, filepath):
-    """Build the ffmpeg command for recording the Icecast stream."""
-    cmd = ['ffmpeg', '-nostdin', '-loglevel', 'error',
-           '-i', 'http://localhost:8000/stream', '-c:a', 'copy']
+    """Build the ffmpeg command for recording the Icecast stream.
+
+    Re-encodes with libmp3lame rather than copy mode because ffmpeg's
+    MP3 muxer doesn't flush data to disk when remuxing an infinite
+    Icecast stream with -c:a copy.  flush_packets ensures data is
+    written promptly so file size updates in real time.
+    """
+    cmd = [
+        'ffmpeg', '-nostdin', '-loglevel', 'error',
+        '-f', 'mp3', '-i', 'http://localhost:8000/stream',
+        '-c:a', 'libmp3lame', '-b:a', '320k',
+        '-flush_packets', '1',
+    ]
     if duration > 0:
         cmd.extend(['-t', str(duration)])
-    cmd.append(filepath)
+    cmd.extend(['-f', 'mp3', filepath])
     return cmd
 
 
@@ -670,6 +680,10 @@ def api_livestream_status():
     if max_duration and max_duration > 0:
         data["max_duration"] = max_duration
         data["remaining_seconds"] = max(0, max_duration - elapsed)
+
+    stderr_content = _get_recording_error()
+    if stderr_content:
+        data["error"] = stderr_content
 
     return {"status": "success", "recording": True, "data": data}
 

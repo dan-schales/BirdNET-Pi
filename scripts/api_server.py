@@ -535,13 +535,15 @@ async def _auto_stop_recording(duration_seconds):
         _recording_timer_tasks.pop(RECORDING_PID_FILE, None)
 
 
-def _build_ffmpeg_cmd(duration, filepath):
+def _build_ffmpeg_cmd(duration):
     """Build the ffmpeg command for recording the Icecast stream.
 
     Re-encodes with libmp3lame rather than copy mode because ffmpeg's
     MP3 muxer doesn't flush data to disk when remuxing an infinite
-    Icecast stream with -c:a copy.  flush_packets ensures data is
-    written promptly so file size updates in real time.
+    Icecast stream with -c:a copy.  Output goes to stdout (pipe:1)
+    so that the calling Python process owns the output file handle,
+    avoiding permission issues when the recordings directory was
+    created by a different user.
     """
     cmd = [
         'ffmpeg', '-nostdin', '-loglevel', 'error',
@@ -551,7 +553,7 @@ def _build_ffmpeg_cmd(duration, filepath):
     ]
     if duration > 0:
         cmd.extend(['-t', str(duration)])
-    cmd.extend(['-f', 'mp3', filepath])
+    cmd.extend(['-f', 'mp3', 'pipe:1'])
     return cmd
 
 
@@ -580,16 +582,23 @@ async def api_livestream_start(request: Request):
     timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
     filename = f"{prefix}_{timestamp}.mp3"
     filepath = os.path.join(RECORDINGS_DIR, filename)
-    os.makedirs(RECORDINGS_DIR, exist_ok=True)
+    os.makedirs(RECORDINGS_DIR, mode=0o755, exist_ok=True)
+    # Ensure we can write to the directory even if it was created by another user
+    if not os.access(RECORDINGS_DIR, os.W_OK):
+        raise HTTPException(500, f"No write permission to {RECORDINGS_DIR}")
 
-    ffmpeg_cmd = _build_ffmpeg_cmd(duration, filepath)
+    ffmpeg_cmd = _build_ffmpeg_cmd(duration)
     stderr_fh = open(RECORDING_STDERR_FILE, 'w')
+    # Open output file in Python so the file is owned by the API server
+    # user, avoiding permission issues with directories created by root.
+    output_fh = open(filepath, 'wb')
     try:
         proc = subprocess.Popen(
             ffmpeg_cmd,
-            stdout=subprocess.DEVNULL, stderr=stderr_fh
+            stdout=output_fh, stderr=stderr_fh
         )
     except FileNotFoundError:
+        output_fh.close()
         stderr_fh.close()
         raise HTTPException(500, "ffmpeg not found on this system")
 
@@ -597,6 +606,7 @@ async def api_livestream_start(request: Request):
     await asyncio.sleep(0.5)
     ret = proc.poll()
     if ret is not None:
+        output_fh.close()
         stderr_fh.close()
         error_msg = _get_recording_error()
         _cleanup_recording_files()

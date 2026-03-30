@@ -29,10 +29,17 @@
   let renamingFile = $state(null);
   let renameValue = $state('');
 
+  // Schedule state
+  let schedules = $state([]);
+  let showScheduleForm = $state(false);
+  let editingScheduleId = $state(null);
+  let schedForm = $state({ name: '', start_time: '', stop_time: '', duration: 30, useStopTime: false, prefix: 'scheduled', days: [0, 1, 2, 3, 4, 5, 6] });
+
   let pollTimer;
   let elapsedTimer;
 
   const TIMER_PRESETS = [5, 10, 15, 30, 60, 120];
+  const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
   function toggle() {
     if (!audioEl) return;
@@ -209,8 +216,128 @@
     if (e.key === 'Escape') cancelRename();
   }
 
+  // --- Schedule functions ---
+
+  async function loadSchedules() {
+    try {
+      const res = await fetch('/api/v2/livestream/schedules');
+      const data = await res.json();
+      schedules = data.data || [];
+    } catch {
+      schedules = [];
+    }
+  }
+
+  function resetScheduleForm() {
+    schedForm = { name: '', start_time: '', stop_time: '', duration: 30, useStopTime: false, prefix: 'scheduled', days: [0, 1, 2, 3, 4, 5, 6] };
+    editingScheduleId = null;
+    showScheduleForm = false;
+  }
+
+  function editSchedule(sched) {
+    editingScheduleId = sched.id;
+    schedForm = {
+      name: sched.name || '',
+      start_time: sched.start_time,
+      stop_time: sched.stop_time || '',
+      duration: sched.duration || 30,
+      useStopTime: !!sched.stop_time,
+      prefix: sched.prefix || 'scheduled',
+      days: [...sched.days],
+    };
+    showScheduleForm = true;
+  }
+
+  function toggleDay(day) {
+    if (schedForm.days.includes(day)) {
+      schedForm.days = schedForm.days.filter(d => d !== day);
+    } else {
+      schedForm.days = [...schedForm.days, day];
+    }
+  }
+
+  async function saveSchedule() {
+    const body = {
+      name: schedForm.name,
+      start_time: schedForm.start_time,
+      prefix: schedForm.prefix || 'scheduled',
+      days: schedForm.days,
+    };
+    if (schedForm.useStopTime) {
+      body.stop_time = schedForm.stop_time;
+    } else {
+      body.duration = schedForm.duration;
+    }
+
+    const url = editingScheduleId
+      ? `/api/v2/livestream/schedules/${editingScheduleId}`
+      : '/api/v2/livestream/schedules';
+    const method = editingScheduleId ? 'PUT' : 'POST';
+
+    try {
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if (res.ok) {
+        resetScheduleForm();
+        loadSchedules();
+      } else {
+        const data = await res.json();
+        alert(data.detail || 'Failed to save schedule');
+      }
+    } catch (e) {
+      console.error('Failed to save schedule:', e);
+    }
+  }
+
+  async function toggleScheduleEnabled(sched) {
+    try {
+      await fetch(`/api/v2/livestream/schedules/${sched.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: !sched.enabled })
+      });
+      loadSchedules();
+    } catch (e) {
+      console.error('Failed to toggle schedule:', e);
+    }
+  }
+
+  async function deleteSchedule(sched) {
+    if (!confirm(`Delete schedule "${sched.name}"?`)) return;
+    try {
+      await fetch(`/api/v2/livestream/schedules/${sched.id}`, { method: 'DELETE' });
+      loadSchedules();
+    } catch (e) {
+      console.error('Failed to delete schedule:', e);
+    }
+  }
+
+  function formatScheduleDays(days) {
+    if (!days || days.length === 0) return 'Never';
+    if (days.length === 7) return 'Every day';
+    if (days.length === 5 && [0,1,2,3,4].every(d => days.includes(d))) return 'Weekdays';
+    if (days.length === 2 && [5,6].every(d => days.includes(d))) return 'Weekends';
+    return days.map(d => DAY_LABELS[d]).join(', ');
+  }
+
+  function formatScheduleEnd(sched) {
+    if (sched.stop_time) return `until ${sched.stop_time}`;
+    if (sched.duration) {
+      const h = Math.floor(sched.duration / 60);
+      const m = sched.duration % 60;
+      if (h > 0 && m > 0) return `for ${h}h ${m}m`;
+      if (h > 0) return `for ${h}h`;
+      return `for ${m}m`;
+    }
+    return '';
+  }
+
   onMount(() => {
     loadRecordings();
+    loadSchedules();
     fetch('/api/v2/livestream/record/status')
       .then(r => r.json())
       .then(data => {
@@ -461,13 +588,150 @@
     </div>
   {/if}
 
+  <!-- Scheduled Recordings -->
+  <div class="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-lg font-semibold">Scheduled Recordings</h2>
+      {#if !showScheduleForm}
+        <button
+          onclick={() => { resetScheduleForm(); showScheduleForm = true; }}
+          class="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-1.5"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+          Add Schedule
+        </button>
+      {/if}
+    </div>
+
+    <!-- Schedule Form -->
+    {#if showScheduleForm}
+      <div class="mb-4 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700 space-y-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Name</label>
+            <input type="text" bind:value={schedForm.name} placeholder="e.g. Dawn chorus"
+              class="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500/40" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">File prefix</label>
+            <input type="text" bind:value={schedForm.prefix} placeholder="scheduled" maxlength="30"
+              class="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500/40" />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Start time</label>
+            <input type="time" bind:value={schedForm.start_time}
+              class="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500/40" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">End condition</label>
+            <div class="flex items-center gap-2 mb-2">
+              <button onclick={() => { schedForm.useStopTime = false; }}
+                class="px-2.5 py-1 text-xs rounded-md transition-colors {!schedForm.useStopTime ? 'bg-blue-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400'}">
+                Duration
+              </button>
+              <button onclick={() => { schedForm.useStopTime = true; }}
+                class="px-2.5 py-1 text-xs rounded-md transition-colors {schedForm.useStopTime ? 'bg-blue-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400'}">
+                Stop time
+              </button>
+            </div>
+            {#if schedForm.useStopTime}
+              <input type="time" bind:value={schedForm.stop_time}
+                class="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500/40" />
+            {:else}
+              <div class="flex items-center gap-2">
+                <input type="number" bind:value={schedForm.duration} min="1" max="1440"
+                  class="w-20 px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500/40" />
+                <span class="text-sm text-gray-500 dark:text-gray-400">minutes</span>
+              </div>
+            {/if}
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Days</label>
+          <div class="flex gap-1.5 flex-wrap">
+            {#each DAY_LABELS as label, i}
+              <button onclick={() => toggleDay(i)}
+                class="w-10 h-8 text-xs rounded-md transition-colors
+                  {schedForm.days.includes(i) ? 'bg-blue-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-300 dark:hover:bg-gray-600'}">
+                {label}
+              </button>
+            {/each}
+            <span class="text-gray-300 dark:text-gray-600 mx-1">|</span>
+            <button onclick={() => { schedForm.days = [0,1,2,3,4,5,6]; }}
+              class="px-2 h-8 text-xs rounded-md bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">
+              All
+            </button>
+            <button onclick={() => { schedForm.days = [0,1,2,3,4]; }}
+              class="px-2 h-8 text-xs rounded-md bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">
+              Weekdays
+            </button>
+            <button onclick={() => { schedForm.days = [5,6]; }}
+              class="px-2 h-8 text-xs rounded-md bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">
+              Weekends
+            </button>
+          </div>
+        </div>
+
+        <div class="flex gap-2 pt-1">
+          <button onclick={saveSchedule}
+            class="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors">
+            {editingScheduleId ? 'Update' : 'Create'} Schedule
+          </button>
+          <button onclick={resetScheduleForm}
+            class="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-lg transition-colors">
+            Cancel
+          </button>
+        </div>
+      </div>
+    {/if}
+
+    <!-- Schedule List -->
+    {#if schedules.length === 0 && !showScheduleForm}
+      <p class="text-sm text-gray-400 dark:text-gray-500">No scheduled recordings. Add one to automatically record at specific times.</p>
+    {:else}
+      <div class="space-y-2">
+        {#each schedules as sched}
+          <div class="flex items-center gap-3 p-3 rounded-lg border border-gray-100 dark:border-gray-800 {sched.enabled ? '' : 'opacity-50'}">
+            <button onclick={() => toggleScheduleEnabled(sched)}
+              class="w-10 h-6 rounded-full relative transition-colors flex-shrink-0
+                {sched.enabled ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'}"
+              title="{sched.enabled ? 'Disable' : 'Enable'}">
+              <span class="absolute top-0.5 {sched.enabled ? 'left-4.5' : 'left-0.5'} w-5 h-5 bg-white rounded-full shadow transition-all"></span>
+            </button>
+            <div class="flex-1 min-w-0">
+              <p class="text-sm font-medium truncate">{sched.name}</p>
+              <p class="text-xs text-gray-500 dark:text-gray-400">
+                {sched.start_time} {formatScheduleEnd(sched)} &middot; {formatScheduleDays(sched.days)}
+              </p>
+            </div>
+            <div class="flex items-center gap-1 flex-shrink-0">
+              <button onclick={() => editSchedule(sched)}
+                class="p-2 text-gray-400 hover:text-blue-500 transition-colors" title="Edit">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+              </button>
+              <button onclick={() => deleteSchedule(sched)}
+                class="p-2 text-gray-400 hover:text-red-500 transition-colors" title="Delete">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+              </button>
+            </div>
+          </div>
+        {/each}
+      </div>
+    {/if}
+  </div>
+
   <!-- About -->
   <div class="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5">
     <h2 class="text-lg font-semibold mb-3">About</h2>
     <p class="text-sm text-gray-500 dark:text-gray-400">
       The live stream broadcasts audio from the BirdNET-Pi microphone via Icecast2.
       Recordings capture the stream as MP3 files that you can download or play back later.
-      Use the timer to automatically stop recording after a set duration.
+      Use the timer to automatically stop recording after a set duration, or create
+      schedules to record automatically at specific times each day.
       Detections are processed independently by the analysis service regardless of
       whether anyone is listening to the stream.
     </p>

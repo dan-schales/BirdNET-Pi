@@ -1,0 +1,15 @@
+[Unit]
+Description=BirdNET-Pi API Server
+After=network.target
+
+[Service]
+Type=simple
+User=BIRDNET_USER_PLACEHOLDER
+WorkingDirectory=HOME_PLACEHOLDER/BirdNET-Pi/scripts
+ExecStart=HOME_PLACEHOLDER/BirdNET-Pi/birdnet/bin/uvicorn api_server:app --host 127.0.0.1 --port 7007 --workers 1
+Restart=on-failure
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,7 @@
+@import "tailwindcss";
+
+@theme {
+  --color-green-brand: #166534;
+  --color-green-light: #77c487;
+  --font-sans: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+}

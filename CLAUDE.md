@@ -1,0 +1,196 @@
+# BirdNET-Pi
+
+Real-time acoustic bird classification system for Raspberry Pi. Fork of `mcguirepr89/BirdNET-Pi`, maintained at `Nachtzuster/BirdNET-Pi`, with a development fork at `dan-schales/BirdNET-Pi`.
+
+## Architecture Overview
+
+BirdNET-Pi is a pipeline-based system with multiple independent systemd services communicating via files and SQLite:
+
+```
+Audio Input (mic/RTSP) → Recording Service (ffmpeg/arecord)
+  → WAV chunks in ~/BirdSongs/StreamData/ (15-sec segments, 48kHz)
+  → inotify triggers birdnet_analysis.py
+  → TFLite ML inference (BirdNET model, 3-sec chunks)
+  → Detection filtering (confidence, species lists, privacy/human filter)
+  → Reporting thread:
+      ├─ sox: extract audio clip + generate spectrogram PNG
+      ├─ SQLite: INSERT into birds.db
+      ├─ CSV: append to BirdDB.txt
+      ├─ Apprise: notifications (90+ platforms)
+      └─ BirdWeather: POST soundscape + detection
+  → Web UI serves results via Caddy reverse proxy
+```
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| ML Models | TensorFlow Lite (BirdNET 6K species, V2.4) |
+| Audio | ffmpeg, sox, arecord, PulseAudio, Icecast2 |
+| Backend API | FastAPI + Uvicorn (port 7007) |
+| Frontend (new) | Svelte 5 SPA + Vite + Tailwind CSS 4 + Chart.js |
+| Frontend (legacy) | PHP served via PHP-FPM |
+| Reverse Proxy | Caddy (port 80/443) |
+| Database | SQLite3 (`birds.db`) |
+| Dashboards | Streamlit + Plotly (port 8501) |
+| Notifications | Apprise |
+| Process Mgmt | systemd services |
+| OS | Raspberry Pi OS (64-bit), also x86_64 |
+
+## Key Directories
+
+```
+BirdNET-Pi/
+├── scripts/           # Backend: Python analysis, PHP web pages, shell services, FastAPI server
+│   ├── api_server.py  # FastAPI REST API + WebSocket (v2 endpoints)
+│   ├── birdnet_analysis.py  # Main ML analysis daemon
+│   ├── daily_plot.py  # Chart generation daemon
+│   ├── plotly_streamlit.py  # Interactive Streamlit dashboard
+│   ├── utils/         # Python modules (analysis, db, models, notifications, reporting, helpers)
+│   ├── *.php          # Legacy PHP web interface pages
+│   └── *.sh           # Shell scripts for services, installation, maintenance
+├── frontend/          # Svelte 5 SPA (new modern UI)
+│   ├── src/           # Components, pages, lib (api, stores, utils)
+│   └── dist/          # Production build output (served by Caddy)
+├── homepage/          # Legacy PHP frontend entry point
+│   ├── index.php      # Routes /api/v1/ and serves legacy views
+│   ├── views.php      # Tab-based legacy UI
+│   └── static/        # Fonts, JS libs, CSS
+├── model/             # TFLite models + labels
+│   ├── *.tflite       # ML model files (26-57MB)
+│   ├── *_Labels.txt   # Species label lists (~6000 species)
+│   └── l18n/          # 38 language translation files (labels_*.json)
+├── templates/         # systemd service templates, cron jobs, config templates
+├── tests/             # Python tests (pytest)
+├── docs/              # Documentation and images
+├── newinstaller.sh    # Entry-point installation script
+└── requirements.txt   # Python dependencies
+```
+
+## Runtime Paths (on deployed Pi)
+
+```
+/etc/birdnet/birdnet.conf     # Main config file (PHP-style INI)
+~/BirdNET-Pi/                 # Codebase + Python venv (birdnet/)
+~/BirdNET-Pi/scripts/birds.db # SQLite detection database
+~/BirdNET-Pi/BirdDB.txt       # CSV log of all detections
+~/BirdNET-Pi/apprise.txt      # Notification targets
+~/BirdNET-Pi/body.txt         # Notification message template
+~/BirdSongs/StreamData/       # Live recording chunks (transient)
+~/BirdSongs/Extracted/        # Extracted clips organized by date/species
+~/BirdSongs/Extracted/Charts/ # Daily PNG charts (Combo-YYYY-MM-DD.png)
+~/BirdSongs/Extracted/By_Date/{date}/{species}/ # Audio + spectrograms
+~/BirdSongs/LivestreamRecordings/ # User-initiated livestream recordings (MP3)
+/tmp/livestream_recording.pid     # Active recording PID + filename + start time
+```
+
+## Database Schema
+
+SQLite `birds.db`, single table:
+
+```sql
+CREATE TABLE detections (
+  Date DATE, Time TIME,
+  Sci_Name VARCHAR(100), Com_Name VARCHAR(100),
+  Confidence FLOAT,      -- 0.0-1.0
+  Lat FLOAT, Lon FLOAT,
+  Cutoff FLOAT,          -- confidence threshold used
+  Week INT,              -- ISO week number
+  Sens FLOAT,            -- sensitivity setting
+  Overlap FLOAT,         -- analysis overlap setting
+  File_Name VARCHAR(100) -- extracted audio filename
+);
+-- Indexes: Com_Name, Sci_Name, (Date DESC, Time DESC)
+```
+
+Image caches: `flickr.db`, `wikipedia.db` (sci_name, image_url, author, license).
+
+## Services (systemd)
+
+| Service | What it runs | Port |
+|---------|-------------|------|
+| birdnet_recording | `birdnet_recording.sh` (ffmpeg/arecord) | - |
+| birdnet_analysis | `birdnet_analysis.py` (ML inference) | - |
+| birdnet_api | `api_server.py` (FastAPI/Uvicorn) | 7007 |
+| livestream | `livestream.sh` (ffmpeg -> Icecast2) | 8000 |
+| spectrogram_viewer | `spectrogram.sh` (sox) | - |
+| birdnet_stats | `plotly_streamlit.py` | 8501 |
+| chart_viewer | `daily_plot.py` | - |
+| birdnet_log | GoTTY log viewer | 8080 |
+| web_terminal | GoTTY shell | 8888 |
+| caddy | Reverse proxy | 80/443 |
+
+## Caddy Routing (generated by install_services.sh)
+
+```
+/api/*        → localhost:7007  (FastAPI)
+/stream       → localhost:8000  (Icecast2)
+/stats*       → localhost:8501  (Streamlit)
+/log*         → localhost:8080  (GoTTY)
+/terminal*    → localhost:8888  (GoTTY)
+/By_Date/*    → static files    (extracted audio)
+/Charts/*     → static files    (daily charts)
+/views.php*   → PHP-FPM         (legacy UI)
+/scripts*     → PHP-FPM         (auth required)
+/*            → frontend/dist/  (Svelte SPA, fallback to index.html)
+```
+
+## Configuration
+
+Main config: `/etc/birdnet/birdnet.conf` (PHP-style, parsed by Python via `helpers.py:get_settings()`).
+
+Key settings groups:
+- **Recording**: `RTSP_STREAM`, `REC_CARD`, `RECORDING_LENGTH`, `CHANNELS`
+- **Model**: `MODEL`, `SENSITIVITY` (0.5-2.0), `CONFIDENCE` (0.0-1.0), `OVERLAP`, `SF_THRESH`
+- **Location**: `LATITUDE`, `LONGITUDE`, `DATABASE_LANG`
+- **Storage**: `RECS_DIR`, `EXTRACTED`, `FULL_DISK`, `PURGE_THRESHOLD`
+- **Integrations**: `BIRDWEATHER_ID`, `HEARTBEAT_URL`, `IMAGE_PROVIDER`
+- **Notifications**: `APPRISE_NOTIFY_*`, `APPRISE_MINIMUM_SECONDS_*`
+- **UI**: `COLOR_SCHEME`, `BIRDNETPI_URL`
+
+Species list files: `include_species_list.txt`, `exclude_species_list.txt`, `whitelist_species_list.txt`.
+
+## Development Commands
+
+```bash
+# Frontend development
+cd frontend && npm install && npm run dev   # Dev server with API proxy
+cd frontend && npm run build                # Production build to dist/
+
+# API server (requires birds.db and birdnet.conf)
+cd scripts && python api_server.py          # Or: uvicorn api_server:app --port 7007
+
+# Python linting
+flake8 scripts/ --max-line-length 160 --max-complexity 15
+
+# Tests
+pytest tests/
+
+# Full install (on a Pi)
+curl -s https://raw.githubusercontent.com/Nachtzuster/BirdNET-Pi/main/newinstaller.sh | bash
+```
+
+## Code Style & Conventions
+
+- **Python**: Flake8 enforced (max-line-length 160, max-complexity 15). CI tests on Python 3.9, 3.11, 3.13.
+- **Frontend**: Svelte 5 runes syntax (`$state()`, `$derived`, `$effect()`). Tailwind utility classes. Dark mode via `dark:` prefixes.
+- **Shell scripts**: Source `birdnet.conf` for configuration. Run as the `birdnet` user (non-root).
+- **PHP**: Large monolithic files (some 10K+ lines). Legacy code - new features go in the Svelte frontend + FastAPI backend.
+- **Database**: Read-only access from API server. Write access only from `birdnet_analysis.py` reporting thread.
+- **Config parsing**: Python reads `birdnet.conf` via `helpers.py:get_settings()` which strips PHP-style quotes.
+
+## Important Patterns
+
+- **inotify-driven**: Recording and analysis are decoupled via filesystem events, not direct calls.
+- **Global model**: TFLite model loaded once at startup, reused across all analyses (`analysis.py:load_global_model()`).
+- **Reporting queue**: Detections are queued and processed in a separate thread to not block analysis.
+- **Sensitivity scaling**: `1 / (1 + exp(-sensitivity * logits))` - adjusts model output without retraining.
+- **Privacy filter**: Human speech detections are masked within a 3-second window.
+- **Image caching**: Wikipedia/Flickr images cached in per-provider SQLite databases.
+- **Graceful shutdown**: SIGTERM/SIGINT handlers in analysis daemon for clean exit.
+
+## Branch Context
+
+- `main` - stable branch tracking upstream `Nachtzuster/BirdNET-Pi`
+- `claude/redesign-frontend-ui-*` - Active development of Svelte SPA frontend + FastAPI backend
+- The Svelte frontend is a new addition replacing the legacy PHP UI

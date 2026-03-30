@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 source /etc/birdnet/birdnet.conf
-my_dir=$HOME/BirdNET-Pi/scripts
+BIRDNET_HOME=$(getent passwd "${BIRDNET_USER}" | cut -d: -f6)
+my_dir=${BIRDNET_HOME}/BirdNET-Pi/scripts
+FRONTEND_DIR=${BIRDNET_HOME}/BirdNET-Pi/frontend/dist
 set -x
 [ -d /etc/caddy ] || mkdir /etc/caddy
 if [ -f /etc/caddy/Caddyfile ];then
@@ -10,55 +12,141 @@ if ! [ -z ${CADDY_PWD} ];then
 HASHWORD=$(caddy hash-password --plaintext ${CADDY_PWD})
 cat << EOF > /etc/caddy/Caddyfile
 http:// ${BIRDNETPI_URL} {
-  root * ${EXTRACTED}
-  file_server browse
-  handle /By_Date/* {
+  # API server
+  @api path /api/*
+  handle @api {
+    reverse_proxy localhost:7007
+  }
+
+  # Static bird data files
+  @bydate path /By_Date/*
+  handle @bydate {
+    root * ${EXTRACTED}
     file_server browse
   }
-  handle /Charts/* {
+  @charts path /Charts/*
+  handle @charts {
+    root * ${EXTRACTED}
     file_server browse
   }
-  basicauth /views.php?view=File* {
-    birdnet ${HASHWORD}
+
+  # Authenticated routes
+  @processed path /Processed*
+  handle @processed {
+    basicauth {
+      birdnet ${HASHWORD}
+    }
+    root * ${EXTRACTED}
+    file_server browse
   }
-  basicauth /Processed* {
-    birdnet ${HASHWORD}
+  @adminscripts path /scripts*
+  handle @adminscripts {
+    basicauth {
+      birdnet ${HASHWORD}
+    }
+    root * ${EXTRACTED}
+    php_fastcgi unix//run/php/php-fpm.sock
   }
-  basicauth /scripts* {
-    birdnet ${HASHWORD}
+  @sysinfo path /phpsysinfo*
+  handle @sysinfo {
+    basicauth {
+      birdnet ${HASHWORD}
+    }
+    root * ${EXTRACTED}
+    file_server browse
   }
-  basicauth /stream {
-    birdnet ${HASHWORD}
+  @terminal path /terminal*
+  handle @terminal {
+    basicauth {
+      birdnet ${HASHWORD}
+    }
+    reverse_proxy localhost:8888
   }
-  basicauth /phpsysinfo* {
-    birdnet ${HASHWORD}
+  @stream path /stream
+  handle @stream {
+    basicauth {
+      birdnet ${HASHWORD}
+    }
+    reverse_proxy localhost:8000
   }
-  basicauth /terminal* {
-    birdnet ${HASHWORD}
+
+  # Proxied services
+  @log path /log*
+  handle @log {
+    reverse_proxy localhost:8080
   }
-  reverse_proxy /stream localhost:8000
-  php_fastcgi unix//run/php/php-fpm.sock
-  reverse_proxy /log* localhost:8080
-  reverse_proxy /stats* localhost:8501
-  reverse_proxy /terminal* localhost:8888
+  @stats path /stats*
+  handle @stats {
+    reverse_proxy localhost:8501
+  }
+
+  # Legacy PHP
+  @legacyphp path /views.php*
+  handle @legacyphp {
+    root * ${EXTRACTED}
+    php_fastcgi unix//run/php/php-fpm.sock
+  }
+
+  # SPA frontend — catch-all fallback
+  handle {
+    root * ${FRONTEND_DIR}
+    try_files {path} /index.html
+    file_server
+  }
 }
 EOF
 else
   cat << EOF > /etc/caddy/Caddyfile
 http:// ${BIRDNETPI_URL} {
-  root * ${EXTRACTED}
-  file_server browse
-  handle /By_Date/* {
+  # API server
+  @api path /api/*
+  handle @api {
+    reverse_proxy localhost:7007
+  }
+
+  # Static bird data files
+  @bydate path /By_Date/*
+  handle @bydate {
+    root * ${EXTRACTED}
     file_server browse
   }
-  handle /Charts/* {
+  @charts path /Charts/*
+  handle @charts {
+    root * ${EXTRACTED}
     file_server browse
   }
-  reverse_proxy /stream localhost:8000
-  php_fastcgi unix//run/php/php-fpm.sock
-  reverse_proxy /log* localhost:8080
-  reverse_proxy /stats* localhost:8501
-  reverse_proxy /terminal* localhost:8888
+
+  # Proxied services
+  @stream path /stream
+  handle @stream {
+    reverse_proxy localhost:8000
+  }
+  @log path /log*
+  handle @log {
+    reverse_proxy localhost:8080
+  }
+  @stats path /stats*
+  handle @stats {
+    reverse_proxy localhost:8501
+  }
+  @terminal path /terminal*
+  handle @terminal {
+    reverse_proxy localhost:8888
+  }
+
+  # Legacy PHP
+  @legacyphp path /views.php*
+  handle @legacyphp {
+    root * ${EXTRACTED}
+    php_fastcgi unix//run/php/php-fpm.sock
+  }
+
+  # SPA frontend — catch-all fallback
+  handle {
+    root * ${FRONTEND_DIR}
+    try_files {path} /index.html
+    file_server
+  }
 }
 EOF
 fi

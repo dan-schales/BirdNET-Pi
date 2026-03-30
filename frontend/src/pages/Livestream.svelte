@@ -33,7 +33,7 @@
   let schedules = $state([]);
   let showScheduleForm = $state(false);
   let editingScheduleId = $state(null);
-  let schedForm = $state({ name: '', start_time: '', stop_time: '', duration: 30, useStopTime: false, prefix: 'scheduled', days: [0, 1, 2, 3, 4, 5, 6] });
+  let schedForm = $state({ name: '', start_time: '', stop_time: '', duration: 30, useStopTime: false, prefix: 'scheduled', days: [0, 1, 2, 3, 4, 5, 6], one_off: false });
 
   let pollTimer;
   let elapsedTimer;
@@ -229,7 +229,7 @@
   }
 
   function resetScheduleForm() {
-    schedForm = { name: '', start_time: '', stop_time: '', duration: 30, useStopTime: false, prefix: 'scheduled', days: [0, 1, 2, 3, 4, 5, 6] };
+    schedForm = { name: '', start_time: '', stop_time: '', duration: 30, useStopTime: false, prefix: 'scheduled', days: [0, 1, 2, 3, 4, 5, 6], one_off: false };
     editingScheduleId = null;
     showScheduleForm = false;
   }
@@ -244,6 +244,7 @@
       useStopTime: !!sched.stop_time,
       prefix: sched.prefix || 'scheduled',
       days: [...sched.days],
+      one_off: !!sched.one_off,
     };
     showScheduleForm = true;
   }
@@ -262,6 +263,7 @@
       start_time: schedForm.start_time,
       prefix: schedForm.prefix || 'scheduled',
       days: schedForm.days,
+      one_off: schedForm.one_off,
     };
     if (schedForm.useStopTime) {
       body.stop_time = schedForm.stop_time;
@@ -676,6 +678,13 @@
           </div>
         </div>
 
+        <label class="flex items-center gap-2 cursor-pointer pt-1">
+          <input type="checkbox" bind:checked={schedForm.one_off}
+            class="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500" />
+          <span class="text-sm text-gray-600 dark:text-gray-400">One-time only</span>
+          <span class="text-xs text-gray-400 dark:text-gray-500">(auto-disables after recording)</span>
+        </label>
+
         <div class="flex gap-2 pt-1">
           <button onclick={saveSchedule}
             class="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors">
@@ -703,7 +712,12 @@
               <span class="absolute top-0.5 {sched.enabled ? 'left-4.5' : 'left-0.5'} w-5 h-5 bg-white rounded-full shadow transition-all"></span>
             </button>
             <div class="flex-1 min-w-0">
-              <p class="text-sm font-medium truncate">{sched.name}</p>
+              <div class="flex items-center gap-2">
+                <p class="text-sm font-medium truncate">{sched.name}</p>
+                {#if sched.one_off}
+                  <span class="px-1.5 py-0.5 text-[10px] font-medium rounded bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 flex-shrink-0">One-time</span>
+                {/if}
+              </div>
               <p class="text-xs text-gray-500 dark:text-gray-400">
                 {sched.start_time} {formatScheduleEnd(sched)} &middot; {formatScheduleDays(sched.days)}
               </p>

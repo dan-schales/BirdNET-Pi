@@ -835,6 +835,8 @@ def _validate_schedule(body):
     name = body.get('name', '').strip()[:100] or f"{prefix} {start_time}"
     enabled = body.get('enabled', True)
 
+    one_off = body.get('one_off', False)
+
     data = {
         "start_time": start_time,
         "stop_time": stop_time,
@@ -843,6 +845,7 @@ def _validate_schedule(body):
         "prefix": prefix,
         "name": name,
         "enabled": bool(enabled),
+        "one_off": bool(one_off),
     }
     return data, None
 
@@ -917,6 +920,14 @@ async def schedule_watcher():
 
                 triggered_today.add(sid)
                 await _schedule_start_recording(sched)
+
+                if sched.get('one_off'):
+                    all_scheds = _load_schedules()
+                    for s in all_scheds:
+                        if s.get('id') == sid:
+                            s['enabled'] = False
+                            break
+                    _save_schedules(all_scheds)
         except Exception:
             pass
 

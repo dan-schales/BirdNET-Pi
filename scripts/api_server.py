@@ -8,6 +8,7 @@ import asyncio
 import subprocess
 import signal
 from contextlib import asynccontextmanager
+import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
@@ -33,6 +34,7 @@ LABELS_PATH = os.path.join(BASE_PATH, "model", "l18n", "labels_en.json")
 SENSITIVE_KEYS = {"CADDY_PWD", "FLICKR_API_KEY", "FLICKR_FILTER_EMAIL", "BIRDWEATHER_ID"}
 RECORDINGS_DIR = os.path.join(USER_HOME, "BirdSongs", "LivestreamRecordings")
 RECORDING_PID_FILE = "/tmp/livestream_recording.pid"
+SCHEDULES_FILE = os.path.join(BASE_PATH, "livestream_schedules.json")
 
 
 # --- Database helpers ---
@@ -155,9 +157,11 @@ async def detection_watcher():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    task = asyncio.create_task(detection_watcher())
+    det_task = asyncio.create_task(detection_watcher())
+    sched_task = asyncio.create_task(schedule_watcher())
     yield
-    task.cancel()
+    det_task.cancel()
+    sched_task.cancel()
 
 
 # --- App ---
@@ -766,6 +770,236 @@ def api_livestream_delete(filename: str):
         raise HTTPException(404, "Recording not found")
     os.unlink(filepath)
     return {"status": "success", "message": "Recording deleted"}
+
+
+# --- Livestream schedule ---
+
+def _load_schedules():
+    """Load schedules from JSON file."""
+    if not os.path.exists(SCHEDULES_FILE):
+        return []
+    try:
+        with open(SCHEDULES_FILE) as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return []
+
+
+def _save_schedules(schedules):
+    """Persist schedules to JSON file."""
+    with open(SCHEDULES_FILE, 'w') as f:
+        json.dump(schedules, f, indent=2)
+
+
+def _validate_time(t):
+    """Validate HH:MM format, return normalized string or None."""
+    if not t:
+        return None
+    m = re.match(r'^(\d{1,2}):(\d{2})$', t.strip())
+    if not m:
+        return None
+    h, mi = int(m.group(1)), int(m.group(2))
+    if h > 23 or mi > 59:
+        return None
+    return f"{h:02d}:{mi:02d}"
+
+
+def _validate_schedule(body):
+    """Validate and normalize schedule fields. Returns (data, error)."""
+    start_time = _validate_time(body.get('start_time', ''))
+    if not start_time:
+        return None, "start_time is required (HH:MM)"
+
+    stop_time = _validate_time(body.get('stop_time', ''))
+    duration = 0
+    if body.get('duration'):
+        try:
+            duration = int(body['duration'])
+            if duration < 1 or duration > 1440:
+                return None, "duration must be 1-1440 minutes"
+        except (TypeError, ValueError):
+            return None, "duration must be an integer (minutes)"
+
+    if not stop_time and not duration:
+        return None, "Either stop_time (HH:MM) or duration (minutes) is required"
+    if stop_time and duration:
+        return None, "Provide stop_time or duration, not both"
+
+    days = body.get('days', [0, 1, 2, 3, 4, 5, 6])
+    if not isinstance(days, list) or not all(isinstance(d, int) and 0 <= d <= 6 for d in days):
+        return None, "days must be a list of integers 0-6 (Mon=0, Sun=6)"
+    if not days:
+        return None, "At least one day must be selected"
+
+    prefix = re.sub(r'[^a-zA-Z0-9_-]', '', body.get('prefix', '')) or 'scheduled'
+    name = body.get('name', '').strip()[:100] or f"{prefix} {start_time}"
+    enabled = body.get('enabled', True)
+
+    data = {
+        "start_time": start_time,
+        "stop_time": stop_time,
+        "duration": duration,
+        "days": sorted(set(days)),
+        "prefix": prefix,
+        "name": name,
+        "enabled": bool(enabled),
+    }
+    return data, None
+
+
+async def _schedule_start_recording(schedule):
+    """Start a recording for a triggered schedule."""
+    recording, _, _, _, _ = _is_recording()
+    if recording:
+        return
+
+    prefix = schedule.get('prefix', 'scheduled')
+    if schedule.get('stop_time'):
+        now = datetime.now()
+        sh, sm = map(int, schedule['stop_time'].split(':'))
+        stop_dt = now.replace(hour=sh, minute=sm, second=0, microsecond=0)
+        if stop_dt <= now:
+            stop_dt += timedelta(days=1)
+        duration = int((stop_dt - now).total_seconds())
+    else:
+        duration = schedule.get('duration', 0) * 60
+
+    timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+    filename = f"{prefix}_{timestamp}.mp3"
+    filepath = os.path.join(RECORDINGS_DIR, filename)
+    os.makedirs(RECORDINGS_DIR, mode=0o755, exist_ok=True)
+
+    ffmpeg_cmd = _build_ffmpeg_cmd(duration)
+    stderr_fh = open(RECORDING_STDERR_FILE, 'w')
+    output_fh = open(filepath, 'wb')
+    try:
+        proc = subprocess.Popen(ffmpeg_cmd, stdout=output_fh, stderr=stderr_fh)
+    except FileNotFoundError:
+        output_fh.close()
+        stderr_fh.close()
+        return
+
+    with open(RECORDING_PID_FILE, 'w') as f:
+        f.write(f"{proc.pid}\n{filename}\n{datetime.now().timestamp()}\n{duration}")
+
+    if duration > 0:
+        task = asyncio.create_task(_auto_stop_recording(duration + 5))
+        _recording_timer_tasks[RECORDING_PID_FILE] = task
+
+
+async def schedule_watcher():
+    """Background task that checks schedules every 30s and triggers recordings."""
+    triggered_today = set()
+    current_date = datetime.now().date()
+
+    while True:
+        try:
+            now = datetime.now()
+            # Reset triggered set at midnight
+            if now.date() != current_date:
+                triggered_today.clear()
+                current_date = now.date()
+
+            schedules = _load_schedules()
+            current_time = now.strftime('%H:%M')
+            current_day = now.weekday()
+
+            for sched in schedules:
+                if not sched.get('enabled', True):
+                    continue
+                sid = sched.get('id', '')
+                if sid in triggered_today:
+                    continue
+                if sched.get('start_time') != current_time:
+                    continue
+                if current_day not in sched.get('days', []):
+                    continue
+
+                triggered_today.add(sid)
+                await _schedule_start_recording(sched)
+        except Exception:
+            pass
+
+        await asyncio.sleep(30)
+
+
+@app.get("/api/v2/livestream/schedules")
+def api_schedules_list():
+    return {"status": "success", "data": _load_schedules()}
+
+
+@app.post("/api/v2/livestream/schedules")
+async def api_schedules_create(request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Invalid request body")
+
+    data, error = _validate_schedule(body)
+    if error:
+        raise HTTPException(400, error)
+
+    data["id"] = str(uuid.uuid4())[:8]
+    data["created"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    schedules = _load_schedules()
+    schedules.append(data)
+    _save_schedules(schedules)
+
+    return {"status": "success", "message": "Schedule created", "data": data}
+
+
+@app.put("/api/v2/livestream/schedules/{schedule_id}")
+async def api_schedules_update(schedule_id: str, request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Invalid request body")
+
+    schedules = _load_schedules()
+    idx = next((i for i, s in enumerate(schedules) if s.get('id') == schedule_id), None)
+    if idx is None:
+        raise HTTPException(404, "Schedule not found")
+
+    data, error = _validate_schedule(body)
+    if error:
+        raise HTTPException(400, error)
+
+    data["id"] = schedule_id
+    data["created"] = schedules[idx].get("created", "")
+    schedules[idx] = data
+    _save_schedules(schedules)
+
+    return {"status": "success", "message": "Schedule updated", "data": data}
+
+
+@app.patch("/api/v2/livestream/schedules/{schedule_id}")
+async def api_schedules_toggle(schedule_id: str, request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Invalid request body")
+
+    schedules = _load_schedules()
+    idx = next((i for i, s in enumerate(schedules) if s.get('id') == schedule_id), None)
+    if idx is None:
+        raise HTTPException(404, "Schedule not found")
+
+    if 'enabled' in body:
+        schedules[idx]['enabled'] = bool(body['enabled'])
+    _save_schedules(schedules)
+
+    return {"status": "success", "message": "Schedule updated", "data": schedules[idx]}
+
+
+@app.delete("/api/v2/livestream/schedules/{schedule_id}")
+def api_schedules_delete(schedule_id: str):
+    schedules = _load_schedules()
+    new_schedules = [s for s in schedules if s.get('id') != schedule_id]
+    if len(new_schedules) == len(schedules):
+        raise HTTPException(404, "Schedule not found")
+    _save_schedules(new_schedules)
+    return {"status": "success", "message": "Schedule deleted"}
 
 
 # --- WebSocket ---

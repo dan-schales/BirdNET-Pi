@@ -35,6 +35,7 @@ export const api = {
   getRecordings: (date = null) => fetchJson(`/api/v2/recordings${date ? `?date=${date}` : ''}`),
   getConfig: () => fetchJson('/api/v2/config'),
   updateConfig: (updates) => putJson('/api/v2/config', updates),
+  restartServices: () => fetch(BASE + '/api/v2/services/restart', { method: 'POST' }).then(r => { if (!r.ok) throw new Error(`API error: ${r.status}`); return r.json(); }),
   getDates: () => fetchJson('/api/v2/dates'),
   getImageUrl: (sciName) => fetchJson(`/api/v1/image/${encodeURIComponent(sciName)}`),
 };

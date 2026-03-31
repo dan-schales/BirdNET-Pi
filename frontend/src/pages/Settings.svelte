@@ -6,6 +6,7 @@
   let editedConfig = $state({});
   let loading = $state(true);
   let saving = $state(false);
+  let restarting = $state(false);
   let saveResult = $state(null);
 
   let dirty = $derived(
@@ -90,12 +91,24 @@
       if (Object.keys(changes).length === 0) return;
       const result = await api.updateConfig(changes);
       config = { ...editedConfig };
-      saveResult = { type: 'success', message: `Settings saved. ${result.restart_required ? 'Restart services for changes to take effect.' : ''}` };
+      saveResult = { type: 'success', message: 'Settings saved.', showRestart: result.restart_required };
     } catch (e) {
       saveResult = { type: 'error', message: e.message || 'Failed to save settings' };
     } finally {
       saving = false;
-      setTimeout(() => { saveResult = null; }, 8000);
+    }
+  }
+
+  async function restartServices() {
+    restarting = true;
+    try {
+      await api.restartServices();
+      saveResult = { type: 'success', message: 'Services are restarting. This may take up to 30 seconds.' };
+    } catch (e) {
+      saveResult = { type: 'error', message: e.message || 'Failed to restart services' };
+    } finally {
+      restarting = false;
+      setTimeout(() => { saveResult = null; }, 10000);
     }
   }
 </script>
@@ -107,8 +120,17 @@
   </div>
 
   {#if saveResult}
-    <div class="rounded-lg px-4 py-3 text-sm {saveResult.type === 'success' ? 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800' : 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800'}">
-      {saveResult.message}
+    <div class="rounded-lg px-4 py-3 text-sm flex items-center justify-between gap-3 {saveResult.type === 'success' ? 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800' : 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800'}">
+      <span>{saveResult.message}</span>
+      {#if saveResult.showRestart}
+        <button
+          onclick={restartServices}
+          disabled={restarting}
+          class="px-3 py-1 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white rounded text-xs font-medium transition-colors shrink-0"
+        >
+          {restarting ? 'Restarting...' : 'Restart Services'}
+        </button>
+      {/if}
     </div>
   {/if}
 

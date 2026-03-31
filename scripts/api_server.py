@@ -493,6 +493,18 @@ async def api_config_update(request: Request):
     return {"status": "success", "updated": list(validated.keys()), "restart_required": True}
 
 
+@app.post("/api/v2/services/restart")
+async def api_services_restart():
+    try:
+        subprocess.Popen(
+            ['sudo', os.path.join(BASE_PATH, 'scripts', 'restart_services.sh')],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+    except OSError as e:
+        raise HTTPException(500, f"Failed to restart services: {e}")
+    return {"status": "success", "message": "Services are restarting"}
+
+
 @app.get("/api/v2/top-species")
 def api_top_species(limit: int = Query(10, ge=1, le=50)):
     rows = query_all(

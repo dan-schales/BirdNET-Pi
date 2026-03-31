@@ -256,6 +256,17 @@
           </div>
         </a>
       </div>
+      <div class="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+        <button
+          onclick={restartServices}
+          disabled={restarting}
+          class="flex items-center gap-2 px-4 py-2 bg-yellow-500 hover:bg-yellow-600 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          {restarting ? 'Restarting...' : 'Restart All Services'}
+        </button>
+        <p class="text-xs text-gray-400 mt-1">Restarts all BirdNET-Pi services. Takes up to 30 seconds.</p>
+      </div>
     </div>
   {/if}
 </div>

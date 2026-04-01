@@ -37,11 +37,26 @@ RECORDING_PID_FILE = "/tmp/livestream_recording.pid"
 
 # --- Database helpers ---
 
+import threading
+import time as _time
+
+_db_local = threading.local()
+
+
 def get_db():
-    """Get a read-only SQLite connection."""
+    """Get a persistent, optimized read-only SQLite connection (one per thread)."""
+    con = getattr(_db_local, "con", None)
+    if con is not None:
+        return con
     con = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA busy_timeout = 5000")
+    con.execute("PRAGMA journal_mode = WAL")
+    con.execute("PRAGMA cache_size = -65536")  # 64 MB
+    con.execute("PRAGMA mmap_size = 268435456")  # 256 MB
+    con.execute("PRAGMA synchronous = NORMAL")
+    con.execute("PRAGMA temp_store = MEMORY")
+    _db_local.con = con
     return con
 
 
@@ -52,14 +67,40 @@ def query_all(sql, params=None):
         rows = [dict(r) for r in cur.fetchall()]
     except sqlite3.Error:
         rows = []
-    finally:
-        con.close()
     return rows
 
 
 def query_one(sql, params=None):
     rows = query_all(sql, params)
     return rows[0] if rows else None
+
+
+# --- Query cache ---
+
+class QueryCache:
+    """Simple TTL cache for expensive query results."""
+
+    def __init__(self):
+        self._cache = {}
+        self._lock = threading.Lock()
+
+    def get(self, key, max_age=30):
+        with self._lock:
+            entry = self._cache.get(key)
+            if entry and (_time.monotonic() - entry[1]) < max_age:
+                return entry[0]
+        return None
+
+    def set(self, key, value):
+        with self._lock:
+            self._cache[key] = (value, _time.monotonic())
+
+    def invalidate(self):
+        with self._lock:
+            self._cache.clear()
+
+
+_cache = QueryCache()
 
 
 # --- Image provider helpers ---
@@ -70,27 +111,38 @@ def _get_image_db_path(provider):
     return os.path.join(BASE_PATH, "scripts", "wikipedia.db")
 
 
-def get_cached_image(sci_name):
-    """Look up cached bird image from the image database."""
+# In-memory image URL cache (loaded once, refreshed on invalidation)
+_image_cache = {}
+_image_cache_loaded = False
+
+
+def _load_image_cache():
+    """Bulk-load all image URLs into memory."""
+    global _image_cache, _image_cache_loaded
     provider = SETTINGS.get("IMAGE_PROVIDER", "WIKIPEDIA")
     db_path = _get_image_db_path(provider)
     if not os.path.exists(db_path):
-        return None
+        _image_cache_loaded = True
+        return
     try:
         con = sqlite3.connect(db_path)
         con.row_factory = sqlite3.Row
-        cur = con.execute(
+        rows = con.execute(
             "SELECT sci_name, com_en_name, image_url, title, id, author_url, license_url "
-            "FROM images WHERE sci_name = ?",
-            (sci_name,),
-        )
-        row = cur.fetchone()
+            "FROM images"
+        ).fetchall()
         con.close()
-        if row:
-            return dict(row)
+        _image_cache = {row["sci_name"]: dict(row) for row in rows}
     except sqlite3.Error:
         pass
-    return None
+    _image_cache_loaded = True
+
+
+def get_cached_image(sci_name):
+    """Look up cached bird image from in-memory cache."""
+    if not _image_cache_loaded:
+        _load_image_cache()
+    return _image_cache.get(sci_name)
 
 
 # --- Labels ---
@@ -146,6 +198,7 @@ async def detection_watcher():
             )
             if latest and latest.get("rowid") != _last_detection_id:
                 _last_detection_id = latest.get("rowid")
+                _cache.invalidate()
                 latest.pop("rowid", None)
                 await ws_manager.broadcast({"type": "new_detection", "data": latest})
         except Exception:
@@ -176,17 +229,25 @@ app.add_middleware(
 
 @app.get("/api/v2/summary")
 def api_summary():
+    cached = _cache.get("summary", max_age=15)
+    if cached is not None:
+        return cached
+    # Single query for today's stats; total_species cached separately (expensive)
+    today_stats = query_one(
+        "SELECT COUNT(*) as today_count, "
+        "COUNT(DISTINCT Sci_Name) as today_species, "
+        "SUM(CASE WHEN Time >= TIME('now','localtime','-1 hour') THEN 1 ELSE 0 END) as hour_count "
+        "FROM detections WHERE Date = DATE('now','localtime')"
+    ) or {"today_count": 0, "today_species": 0, "hour_count": 0}
     total = query_one("SELECT COUNT(*) as total_detections FROM detections") or {"total_detections": 0}
-    today = query_one("SELECT COUNT(*) as today_count FROM detections WHERE Date = DATE('now','localtime')") or {"today_count": 0}
-    hour = query_one(
-        "SELECT COUNT(*) as hour_count FROM detections "
-        "WHERE Date = DATE('now','localtime') AND Time >= TIME('now','localtime','-1 hour')"
-    ) or {"hour_count": 0}
-    today_species = query_one(
-        "SELECT COUNT(DISTINCT Sci_Name) as today_species FROM detections WHERE Date = DATE('now','localtime')"
-    ) or {"today_species": 0}
-    total_species = query_one("SELECT COUNT(DISTINCT Sci_Name) as total_species FROM detections") or {"total_species": 0}
-    return {**total, **today, **hour, **today_species, **total_species}
+    # Cache total_species longer since it's the most expensive (full table DISTINCT)
+    total_species = _cache.get("total_species", max_age=300)
+    if total_species is None:
+        total_species = query_one("SELECT COUNT(DISTINCT Sci_Name) as total_species FROM detections") or {"total_species": 0}
+        _cache.set("total_species", total_species)
+    result = {**total, **today_stats, **total_species}
+    _cache.set("summary", result)
+    return result
 
 
 @app.get("/api/v2/detections/today")
@@ -244,7 +305,12 @@ def api_species(
     sort: str = Query("occurrences", regex=r"^(occurrences|confidence|date|alpha)$"),
     date: Optional[str] = Query(None, regex=r"^\d{4}-\d{2}-\d{2}$"),
 ):
-    where = "" if date is None else f'WHERE Date = "{date}"'
+    cache_key = f"species:{sort}:{date}"
+    cached = _cache.get(cache_key, max_age=30)
+    if cached is not None:
+        return cached
+    where = "" if date is None else "WHERE Date = :date"
+    params = {"date": date} if date else {}
     order_map = {
         "occurrences": "COUNT(*) DESC",
         "confidence": "MAX(Confidence) DESC",
@@ -256,11 +322,15 @@ def api_species(
         f"SELECT Com_Name, Sci_Name, COUNT(*) as count, "
         f"MAX(Confidence) as max_confidence, MAX(Date) as last_date, "
         f"MIN(Date) as first_date "
-        f"FROM detections {where} GROUP BY Sci_Name ORDER BY {order}"
+        f"FROM detections {where} GROUP BY Sci_Name ORDER BY {order}",
+        params,
     )
+    if not _image_cache_loaded:
+        _load_image_cache()
     for r in rows:
-        image = get_cached_image(r["Sci_Name"])
+        image = _image_cache.get(r["Sci_Name"])
         r["image_url"] = image["image_url"] if image else None
+    _cache.set(cache_key, rows)
     return rows
 
 
@@ -358,6 +428,9 @@ def api_daily_chart(date: Optional[str] = Query(None, regex=r"^\d{4}-\d{2}-\d{2}
 
 @app.get("/api/v2/weekly-report")
 def api_weekly_report():
+    cached = _cache.get("weekly_report", max_age=60)
+    if cached is not None:
+        return cached
     this_week = query_all(
         "SELECT Com_Name, Sci_Name, COUNT(*) as count "
         "FROM detections WHERE Date >= DATE('now','localtime','-7 days') "
@@ -395,6 +468,7 @@ def api_weekly_report():
                 "change_pct": -100.0,
                 "is_new": False,
             })
+    _cache.set("weekly_report", report)
     return report
 
 
@@ -522,10 +596,14 @@ def api_top_species(limit: int = Query(10, ge=1, le=50)):
 @app.get("/api/v2/dates")
 def api_dates():
     """Return list of dates that have detections, most recent first."""
+    cached = _cache.get("dates", max_age=60)
+    if cached is not None:
+        return cached
     rows = query_all(
-        "SELECT DISTINCT Date as date, COUNT(*) as count FROM detections "
+        "SELECT Date as date, COUNT(*) as count FROM detections "
         "GROUP BY Date ORDER BY Date DESC LIMIT 365"
     )
+    _cache.set("dates", rows)
     return rows
 
 

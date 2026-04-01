@@ -199,6 +199,9 @@ def bird_weather(file: ParseFileName, detections: [Detection]):
         soundscape_id = sdata['soundscape']['id']
 
         for detection in detections:
+            if 'Human' in detection.scientific_name:
+                log.info("Skipping human detection for BirdWeather: %s", detection.scientific_name)
+                continue
             # POST detection to server
             detection_url = f'https://app.birdweather.com/api/v1/stations/{conf["BIRDWEATHER_ID"]}/detections'
 

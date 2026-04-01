@@ -58,6 +58,31 @@ def get_settings(settings_path='/etc/birdnet/birdnet.conf', force_reload=False):
     return settings
 
 
+def update_settings(updates, settings_path='/etc/birdnet/birdnet.conf'):
+    """Update specific settings in the config file.
+
+    Reads the file, replaces matching KEY=VALUE lines, writes back atomically,
+    and reloads the cached settings.
+    """
+    with open(settings_path, 'r') as f:
+        contents = f.read()
+
+    for key, value in updates.items():
+        pattern = rf'^{re.escape(key)}=.*$'
+        replacement = f'{key}={value}'
+        new_contents = re.sub(pattern, replacement, contents, flags=re.MULTILINE)
+        if new_contents == contents and not re.search(pattern, contents, flags=re.MULTILINE):
+            raise KeyError(f"Setting '{key}' not found in config file")
+        contents = new_contents
+
+    tmp_path = settings_path + '.tmp'
+    with open(tmp_path, 'w') as f:
+        f.write(contents)
+    os.replace(tmp_path, settings_path)
+
+    return _load_settings(settings_path, force_reload=True)
+
+
 def get_open_files_in_dir(dir_name):
     result = subprocess.run(['lsof', '-w', '-Fn', '+D', f'{dir_name}'], check=False, capture_output=True)
     ret = result.stdout.decode('utf-8')

@@ -6,6 +6,19 @@ async function fetchJson(url) {
   return res.json();
 }
 
+async function putJson(url, data) {
+  const res = await fetch(BASE + url, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `API error: ${res.status}`);
+  }
+  return res.json();
+}
+
 export const api = {
   getSummary: () => fetchJson('/api/v2/summary'),
   getDetectionsToday: (limit = 200) => fetchJson(`/api/v2/detections/today?limit=${limit}`),
@@ -21,6 +34,8 @@ export const api = {
   getWeeklyReport: () => fetchJson('/api/v2/weekly-report'),
   getRecordings: (date = null) => fetchJson(`/api/v2/recordings${date ? `?date=${date}` : ''}`),
   getConfig: () => fetchJson('/api/v2/config'),
+  updateConfig: (updates) => putJson('/api/v2/config', updates),
+  restartServices: () => fetch(BASE + '/api/v2/services/restart', { method: 'POST' }).then(r => { if (!r.ok) throw new Error(`API error: ${r.status}`); return r.json(); }),
   getDates: () => fetchJson('/api/v2/dates'),
   getImageUrl: (sciName) => fetchJson(`/api/v1/image/${encodeURIComponent(sciName)}`),
 };

@@ -228,6 +228,15 @@ CHANNELS=2
 
 PRIVACY_THRESHOLD=0
 
+## DETECT_HUMANS enables saving human sound detections (Human vocal,
+## Human non-vocal, Human whistle) to the database as positive detections
+## instead of filtering them out. When set to 1, the privacy filter is
+## bypassed and human sounds are treated like any other species detection.
+## Note: human detections are excluded from BirdWeather uploads.
+## 0 = off (default, privacy filter active), 1 = on
+
+DETECT_HUMANS=0
+
 ## RECORDING_LENGTH sets the length of the recording that BirdNET-Lite will
 ## analyze.
 

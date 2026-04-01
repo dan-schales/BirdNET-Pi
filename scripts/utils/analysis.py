@@ -89,6 +89,16 @@ def analyzeAudioData(chunks, overlap, lat, lon, week):
 
 def filter_humans(predictions):
     conf = get_settings()
+
+    try:
+        detect_humans = conf.getint('DETECT_HUMANS')
+    except (ValueError, KeyError):
+        detect_humans = 0
+
+    if detect_humans:
+        log.info("DETECT_HUMANS enabled: human sounds will be kept as detections")
+        return [p[:10] for p in predictions]
+
     priv_thresh = conf.getfloat('PRIVACY_THRESHOLD')
     human_cutoff = max(10, int(6000 * priv_thresh / 100.0))
     log.debug("HUMAN-CUTOFF AT: %d", human_cutoff)
@@ -146,6 +156,11 @@ def run_analysis(file):
     model = load_global_model()
     names = get_language(conf['DATABASE_LANG'])
 
+    try:
+        detect_humans = conf.getint('DETECT_HUMANS')
+    except (ValueError, KeyError):
+        detect_humans = 0
+
     # Read audio data & handle errors
     try:
         audio_data = readAudioData(file.file_name, conf.getfloat('OVERLAP'), model.sample_rate, model.chunk_duration)
@@ -167,7 +182,9 @@ def run_analysis(file):
                     log.warning("Excluded as INCLUDE_LIST is active but this species is not in it: %s %s", sci_name, com_name)
                 elif sci_name in exclude_list and len(exclude_list) != 0:
                     log.warning("Excluded as species in EXCLUDE_LIST: %s %s", sci_name, com_name)
-                elif sci_name not in predicted_species_list and len(predicted_species_list) != 0 and sci_name not in whitelist_list:
+                elif (sci_name not in predicted_species_list and len(predicted_species_list) != 0
+                      and sci_name not in whitelist_list
+                      and not (detect_humans and 'Human' in sci_name)):
                     log.warning("Excluded as below Species Occurrence Frequency Threshold: %s %s", sci_name, com_name)
                 else:
                     d = Detection(

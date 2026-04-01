@@ -194,6 +194,71 @@ class TestFilterHumans(unittest.TestCase):
         # Assertions
         self.assertEqual(result, expected)
 
+    @patch('scripts.utils.helpers._load_settings')
+    def test_filter_humans_detect_humans_enabled(self, mock_load_settings):
+        settings = Settings.with_defaults()
+        settings['DETECT_HUMANS'] = 1
+        mock_load_settings.return_value = settings
+
+        # Input detections with humans - should pass through when DETECT_HUMANS=1
+        detections = [
+            [('Human vocal_Human vocal', 0.95), ('Bird_A', 0.8)],
+            [('Bird_A', 0.9), ('Bird_B', 0.8)],
+            [('Bird_C', 0.9), ('Bird_D', 0.8)],
+        ]
+
+        # Expected: all predictions pass through with top-10 truncation, human labels preserved
+        expected = [
+            [('Human vocal_Human vocal', 0.95), ('Bird_A', 0.8)],
+            [('Bird_A', 0.9), ('Bird_B', 0.8)],
+            [('Bird_C', 0.9), ('Bird_D', 0.8)],
+        ]
+
+        result = filter_humans(detections)
+        self.assertEqual(result, expected)
+
+    @patch('scripts.utils.helpers._load_settings')
+    def test_filter_humans_detect_humans_no_neighbour_masking(self, mock_load_settings):
+        settings = Settings.with_defaults()
+        settings['DETECT_HUMANS'] = 1
+        mock_load_settings.return_value = settings
+
+        # When DETECT_HUMANS=1, neighbours of human chunks should NOT be masked
+        detections = [
+            [('Bird_A', 0.9), ('Bird_B', 0.8)],
+            [('Human_Human', 0.95), ('Bird_C', 0.7)],
+            [('Bird_D', 0.6), ('Bird_E', 0.5)]
+        ]
+
+        expected = [
+            [('Bird_A', 0.9), ('Bird_B', 0.8)],
+            [('Human_Human', 0.95), ('Bird_C', 0.7)],
+            [('Bird_D', 0.6), ('Bird_E', 0.5)]
+        ]
+
+        result = filter_humans(detections)
+        self.assertEqual(result, expected)
+
+    @patch('scripts.utils.helpers._load_settings')
+    def test_filter_humans_detect_humans_disabled_still_filters(self, mock_load_settings):
+        settings = Settings.with_defaults()
+        settings['DETECT_HUMANS'] = 0
+        mock_load_settings.return_value = settings
+
+        # When DETECT_HUMANS=0, existing privacy filter should still work
+        detections = [
+            [('Human_Human', 0.95), ('Bird_A', 0.8)],
+            [('Bird_B', 0.9), ('Bird_C', 0.8)],
+        ]
+
+        expected = [
+            [('Human_Human', 0.0)],
+            [('Human_Human', 0.0)],
+        ]
+
+        result = filter_humans(detections)
+        self.assertEqual(result, expected)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -17,7 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from utils.helpers import get_settings, DB_PATH, BASE_PATH
+from utils.helpers import get_settings, update_settings, DB_PATH, BASE_PATH
 
 # --- Configuration ---
 
@@ -426,6 +426,83 @@ def api_recordings(date: Optional[str] = Query(None, regex=r"^\d{4}-\d{2}-\d{2}$
 def api_config():
     settings = get_settings(force_reload=True)
     return {k: v for k, v in dict(settings).items() if k not in SENSITIVE_KEYS}
+
+
+EDITABLE_KEYS = {
+    'CONFIDENCE', 'SENSITIVITY', 'OVERLAP', 'PRIVACY_THRESHOLD',
+    'DETECT_HUMANS', 'RECORDING_LENGTH', 'EXTRACTION_LENGTH',
+    'CHANNELS', 'FULL_DISK', 'DATABASE_LANG', 'COLOR_SCHEME',
+    'MAX_FILES_SPECIES', 'SITE_NAME', 'LATITUDE', 'LONGITUDE',
+    'APPRISE_NOTIFY_EACH_DETECTION', 'APPRISE_NOTIFY_NEW_SPECIES',
+    'APPRISE_NOTIFY_NEW_SPECIES_EACH_DAY', 'APPRISE_WEEKLY_REPORT',
+    'PURGE_THRESHOLD',
+}
+
+VALIDATION_RULES = {
+    'CONFIDENCE': {'type': float, 'min': 0.0, 'max': 1.0},
+    'SENSITIVITY': {'type': float, 'min': 0.5, 'max': 2.0},
+    'OVERLAP': {'type': float, 'min': 0.0, 'max': 3.0},
+    'PRIVACY_THRESHOLD': {'type': int, 'min': 0, 'max': 3},
+    'DETECT_HUMANS': {'type': int, 'choices': [0, 1]},
+    'RECORDING_LENGTH': {'type': int, 'min': 3, 'max': 120},
+    'EXTRACTION_LENGTH': {'type': int, 'min': 3, 'max': 60},
+    'CHANNELS': {'type': int, 'min': 1, 'max': 6},
+    'FULL_DISK': {'type': str, 'choices': ['purge', 'keep']},
+    'LATITUDE': {'type': float, 'min': -90.0, 'max': 90.0},
+    'LONGITUDE': {'type': float, 'min': -180.0, 'max': 180.0},
+    'MAX_FILES_SPECIES': {'type': int, 'min': 0, 'max': 10000},
+    'PURGE_THRESHOLD': {'type': int, 'min': 50, 'max': 99},
+}
+
+
+@app.put("/api/v2/config")
+async def api_config_update(request: Request):
+    body = await request.json()
+    if not isinstance(body, dict) or not body:
+        raise HTTPException(400, "Request body must be a non-empty JSON object")
+
+    invalid_keys = set(body.keys()) - EDITABLE_KEYS
+    if invalid_keys:
+        raise HTTPException(400, f"Non-editable keys: {', '.join(sorted(invalid_keys))}")
+
+    validated = {}
+    for key, value in body.items():
+        rule = VALIDATION_RULES.get(key)
+        if rule:
+            try:
+                typed_value = rule['type'](value)
+            except (ValueError, TypeError):
+                raise HTTPException(400, f"Invalid type for {key}: expected {rule['type'].__name__}")
+            if 'choices' in rule and typed_value not in rule['choices']:
+                raise HTTPException(400, f"Invalid value for {key}: must be one of {rule['choices']}")
+            if 'min' in rule and typed_value < rule['min']:
+                raise HTTPException(400, f"Value for {key} must be >= {rule['min']}")
+            if 'max' in rule and typed_value > rule['max']:
+                raise HTTPException(400, f"Value for {key} must be <= {rule['max']}")
+            validated[key] = str(typed_value)
+        else:
+            validated[key] = str(value).strip()
+
+    try:
+        update_settings(validated)
+    except KeyError as e:
+        raise HTTPException(400, str(e))
+    except OSError as e:
+        raise HTTPException(500, f"Failed to write config: {e}")
+
+    return {"status": "success", "updated": list(validated.keys()), "restart_required": True}
+
+
+@app.post("/api/v2/services/restart")
+async def api_services_restart():
+    try:
+        subprocess.Popen(
+            ['sudo', os.path.join(BASE_PATH, 'scripts', 'restart_services.sh')],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+    except OSError as e:
+        raise HTTPException(500, f"Failed to restart services: {e}")
+    return {"status": "success", "message": "Services are restarting"}
 
 
 @app.get("/api/v2/top-species")

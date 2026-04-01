@@ -19,6 +19,7 @@ class Settings(dict):
             "CONFIDENCE": 0.7,
             "DATABASE_LANG": "en",
             "PRIVACY_THRESHOLD": 0,
+            "DETECT_HUMANS": 0,
             "EXTRACTION_LENGTH": 6,
             "MODEL": "BirdNET_GLOBAL_6K_V2.4_Model_FP16",
             "DATA_MODEL_VERSION": 1,

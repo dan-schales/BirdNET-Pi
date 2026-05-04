@@ -18,6 +18,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from utils.helpers import get_settings, update_settings, DB_PATH, BASE_PATH
+from utils.predictions import compute_predictions
 
 # --- Configuration ---
 
@@ -470,6 +471,67 @@ def api_weekly_report():
             })
     _cache.set("weekly_report", report)
     return report
+
+
+@app.get("/api/v2/predictions")
+def api_predictions(min_detections: int = Query(3, ge=1, le=1000)):
+    """Seasonal arrival/peak predictions per species, derived from local detections only.
+
+    Aggregates by ISO-week across all years of recorded data and classifies each
+    species relative to the current week (present, expected_now, coming_soon,
+    overdue, late_season, out_of_season).
+    """
+    cache_key = f"predictions:{min_detections}"
+    cached = _cache.get(cache_key, max_age=300)
+    if cached is not None:
+        return cached
+
+    week_rows_raw = query_all(
+        "SELECT Sci_Name, Com_Name, "
+        "CAST(strftime('%Y', Date) AS INTEGER) as year, "
+        "CAST(strftime('%W', Date) AS INTEGER) as week, "
+        "COUNT(*) as count "
+        "FROM detections GROUP BY Sci_Name, year, week"
+    )
+    week_rows = [
+        {"sci_name": r["Sci_Name"], "com_name": r["Com_Name"],
+         "year": r["year"], "week": r["week"], "count": r["count"]}
+        for r in week_rows_raw
+    ]
+
+    meta_raw = query_all(
+        "SELECT Sci_Name, COUNT(*) as total_count, "
+        "MIN(Date) as first_ever, "
+        "MAX(Date || ' ' || Time) as last_seen "
+        "FROM detections GROUP BY Sci_Name"
+    )
+    today = datetime.now().date()
+    year_start = f"{today.year}-01-01"
+    first_this_year_raw = query_all(
+        "SELECT Sci_Name, MIN(Date) as first_this_year "
+        "FROM detections WHERE Date >= :start GROUP BY Sci_Name",
+        {"start": year_start},
+    )
+    first_year_map = {r["Sci_Name"]: r["first_this_year"] for r in first_this_year_raw}
+    meta_rows = [
+        {"sci_name": m["Sci_Name"], "total_count": m["total_count"],
+         "first_ever": m["first_ever"], "last_seen": m["last_seen"],
+         "first_this_year": first_year_map.get(m["Sci_Name"])}
+        for m in meta_raw
+    ]
+
+    result = compute_predictions(week_rows, meta_rows, today=today,
+                                 min_detections=min_detections)
+
+    # Attach image URLs from cache
+    if not _image_cache_loaded:
+        _load_image_cache()
+    for s in result["species"]:
+        image = _image_cache.get(s["sci_name"])
+        s["image_url"] = image["image_url"] if image else None
+
+    _cache.set(cache_key, result)
+    return result
 
 
 @app.get("/api/v2/recordings")

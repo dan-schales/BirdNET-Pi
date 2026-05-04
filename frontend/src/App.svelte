@@ -7,6 +7,7 @@
   import SpeciesDetail from './pages/SpeciesDetail.svelte';
   import History from './pages/History.svelte';
   import WeeklyReport from './pages/WeeklyReport.svelte';
+  import Predictions from './pages/Predictions.svelte';
   import Recordings from './pages/Recordings.svelte';
   import Livestream from './pages/Livestream.svelte';
   import Settings from './pages/Settings.svelte';
@@ -18,6 +19,7 @@
     '/species/:sciName': SpeciesDetail,
     '/history': History,
     '/weekly': WeeklyReport,
+    '/predictions': Predictions,
     '/recordings': Recordings,
     '/livestream': Livestream,
     '/settings': Settings,

@@ -32,6 +32,7 @@ export const api = {
   getTopSpecies: (limit = 10) => fetchJson(`/api/v2/top-species?limit=${limit}`),
   getDailyChart: (date = null) => `/api/v2/charts/daily${date ? `?date=${date}` : ''}`,
   getWeeklyReport: () => fetchJson('/api/v2/weekly-report'),
+  getPredictions: (minDetections = 3) => fetchJson(`/api/v2/predictions?min_detections=${minDetections}`),
   getRecordings: (date = null) => fetchJson(`/api/v2/recordings${date ? `?date=${date}` : ''}`),
   getConfig: () => fetchJson('/api/v2/config'),
   updateConfig: (updates) => putJson('/api/v2/config', updates),

@@ -248,9 +248,11 @@
       </div>
 
       <p class="text-[11px] text-gray-400">
-        Predictions are derived only from this BirdNET-Pi's detection history.
-        Accuracy improves with more years of recorded data; a future version will
-        cross-reference Cornell's eBird data.
+        Predictions use only this BirdNET-Pi's detection history — no external
+        datasets — and classify each species by whether it was historically
+        recorded within ±2 weeks of the current week. Accuracy improves with
+        more years of data; a future version may cross-reference Cornell's
+        eBird data.
       </p>
     {/if}
   {/if}

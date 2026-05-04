@@ -43,45 +43,71 @@ def _circular_distance_forward(from_week, to_week):
     return (to_week - from_week) % WEEKS_PER_YEAR
 
 
-def classify_status(arrival_week, departure_week, current_week,
-                    days_since_last_seen, years_observed,
-                    weeks_observed_count):
-    """Determine the species' current seasonal status.
+def classify_status(frequency_by_week, current_week, days_since_last_seen,
+                    years_observed, weeks_observed_count, detected_this_year):
+    """Determine the species' current seasonal status from its weekly history.
+
+    Classification is driven entirely by `frequency_by_week` (the per-week
+    fraction of years in which the species was detected). This avoids the
+    "continuous active window" trap where a species detected only in spring
+    and fall would be flagged as expected during the empty summer gap.
 
     Returns one of: 'present', 'expected_now', 'coming_soon', 'overdue',
     'late_season', 'out_of_season', 'insufficient_data'.
     """
-    if years_observed < 1 or arrival_week is None:
+    n = len(frequency_by_week)
+    if years_observed < 1 or not any(frequency_by_week):
         return "insufficient_data"
-
-    # Year-round species (detected in >= 40 distinct weeks total) treated specially
-    year_round = weeks_observed_count >= 40
 
     if days_since_last_seen is not None and days_since_last_seen <= 14:
         return "present"
 
-    if year_round:
-        # Expected to be present continuously; not detected recently => overdue
+    # Year-round residents (detected in 40+ distinct weeks across history)
+    if weeks_observed_count >= 40:
         return "overdue" if years_observed >= 2 else "present"
 
-    # Build the active window with a small tolerance on both sides
-    in_window = _is_in_active_window(current_week, arrival_week, departure_week)
+    def has_freq_within(center, half_window):
+        return any(frequency_by_week[(center + o) % n] > 0
+                   for o in range(-half_window, half_window + 1))
 
-    if in_window:
-        if days_since_last_seen is not None and days_since_last_seen <= 60:
+    # Historically detected at or near the current week (±2)
+    if has_freq_within(current_week, 2):
+        if days_since_last_seen is not None and days_since_last_seen <= 30:
             return "late_season"
         return "expected_now" if years_observed >= 2 else "out_of_season"
 
-    weeks_until_arrival = _circular_distance_forward(current_week, arrival_week)
-    if 1 <= weeks_until_arrival <= 6:
-        return "coming_soon"
+    # Look forward up to 8 weeks for the next historical detection cluster
+    for i in range(3, 9):
+        w = (current_week + i) % n
+        if frequency_by_week[w] > 0:
+            return "coming_soon"
+
+    # Recent past had detections but the species hasn't shown this year
+    if not detected_this_year:
+        for i in range(3, 7):
+            w = (current_week - i) % n
+            if frequency_by_week[w] > 0:
+                return "overdue"
 
     return "out_of_season"
+
+
+def _next_active_week_offset(frequency_by_week, current_week, max_lookahead=12):
+    """Number of weeks until the next week with any historical detection.
+
+    Returns None if no detections occur within `max_lookahead` weeks.
+    """
+    n = len(frequency_by_week)
+    for i in range(1, max_lookahead + 1):
+        if frequency_by_week[(current_week + i) % n] > 0:
+            return i
+    return None
 
 
 def _is_in_active_window(current_week, arrival_week, departure_week, tolerance=2):
     """Return True when current_week sits within the seasonal window.
 
+    Retained for any external callers; classify_status no longer uses it.
     Handles both normal (arrival < departure) and wrap-around (e.g. winter
     species spanning Dec -> Feb) cases.
     """
@@ -173,17 +199,18 @@ def compute_predictions(week_rows, meta_rows, today=None, min_detections=3):
         detected_this_year = first_this_year is not None
 
         status = classify_status(
-            arrival_week=arrival_week,
-            departure_week=departure_week,
+            frequency_by_week=frequency_by_week,
             current_week=current_week,
             days_since_last_seen=days_since,
             years_observed=years_observed,
             weeks_observed_count=len(weeks_seen),
+            detected_this_year=detected_this_year,
         )
 
         weeks_until_expected = None
-        if status == "coming_soon" and arrival_week is not None:
-            weeks_until_expected = _circular_distance_forward(current_week, arrival_week)
+        if status == "coming_soon":
+            weeks_until_expected = _next_active_week_offset(
+                frequency_by_week, current_week, max_lookahead=12)
 
         species_out.append({
             "com_name": spec["com_name"],

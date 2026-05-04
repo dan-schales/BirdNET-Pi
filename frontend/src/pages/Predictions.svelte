@@ -85,14 +85,6 @@
     { id: 'out_of_season', label: 'Out of Season' },
     { id: 'all',           label: 'All' },
   ];
-
-  function freqColor(v) {
-    if (v >= 0.75) return 'bg-green-600 dark:bg-green-500';
-    if (v >= 0.5)  return 'bg-green-500 dark:bg-green-400';
-    if (v >= 0.25) return 'bg-green-400 dark:bg-green-500/70';
-    if (v > 0)     return 'bg-green-300 dark:bg-green-600/50';
-    return 'bg-gray-100 dark:bg-gray-800';
-  }
 </script>
 
 <div class="space-y-6">
@@ -231,16 +223,20 @@
                       <span class="text-gray-400">—</span>
                     {/if}
                   </td>
-                  <td class="px-4 py-3 hidden md:table-cell">
-                    <div class="flex gap-px items-end" title="Detection frequency by week of year">
+                  <td class="px-4 py-3 hidden md:table-cell w-[280px]">
+                    <div class="flex gap-px items-end w-full h-6 bg-gray-50 dark:bg-gray-800/40 rounded px-0.5"
+                         title="Detection frequency by week of year">
                       {#each row.frequency_by_week as v, i}
-                        <div
-                          class="w-[3px] h-4 {freqColor(v)} {i === data.current_week ? 'ring-1 ring-amber-500 ring-offset-0' : ''}"
-                          title="Week {i}: {Math.round(v * 100)}% of years">
+                        {@const isNow = i === data.current_week}
+                        <div class="flex-1 flex flex-col justify-end h-full" title="Week {i}: {Math.round(v * 100)}% of years detected">
+                          <div
+                            class="{isNow ? 'bg-amber-500 dark:bg-amber-400' : v > 0 ? 'bg-green-500 dark:bg-green-400' : 'bg-gray-300 dark:bg-gray-700'}"
+                            style="height: {isNow ? Math.max(v * 100, 100) : v > 0 ? Math.max(v * 100, 18) : 6}%">
+                          </div>
                         </div>
                       {/each}
                     </div>
-                    <div class="flex justify-between text-[10px] text-gray-400 mt-1">
+                    <div class="flex justify-between text-[10px] text-gray-400 mt-1 w-full px-0.5">
                       <span>Jan</span><span>Apr</span><span>Jul</span><span>Oct</span><span>Dec</span>
                     </div>
                   </td>

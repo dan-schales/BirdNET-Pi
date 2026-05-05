@@ -70,30 +70,17 @@ def classify_status(frequency_by_week, current_week, days_since_last_seen,
         return any(frequency_by_week[(center + o) % n] > 0
                    for o in range(-half_window, half_window + 1))
 
-    def nearby_evidence_strong(center):
-        """True when there is enough nearby history to justify 'expected now'.
-
-        Either:
-          - any year detected the species in the immediate +/-1 week window, OR
-          - >= 2 of the 5 weeks in the +/-2 window saw any historical detection.
-        Avoids flagging a single sporadic detection at the edge of the window
-        when the dataset only has 1-2 years.
-        """
-        immediate = any(frequency_by_week[(center + o) % n] > 0
-                        for o in (-1, 0, 1))
-        if immediate:
-            return True
-        wide_hits = sum(1 for o in range(-2, 3)
-                        if frequency_by_week[(center + o) % n] > 0)
-        return wide_hits >= 2
-
-    # Historically detected at or near the current week
-    if nearby_evidence_strong(current_week):
+    # "Expected Now" requires direct evidence at the current week or its
+    # immediate +/-1 neighbours. Wider-window fallbacks (e.g. one detection
+    # 2 weeks before + one 2 weeks after) make the chart look like an empty
+    # gap to the user even though the classifier is firing - so we don't
+    # use them.
+    if has_freq_within(current_week, 1):
         if days_since_last_seen is not None and days_since_last_seen <= 30:
             return "late_season"
         return "expected_now" if years_observed >= 2 else "out_of_season"
 
-    # Look forward up to 8 weeks for the next historical detection cluster
+    # Look forward up to 8 weeks for the next historical detection
     for i in range(2, 9):
         w = (current_week + i) % n
         if frequency_by_week[w] > 0:

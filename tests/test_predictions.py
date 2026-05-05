@@ -89,12 +89,29 @@ class TestClassifyStatus(unittest.TestCase):
             years_observed=2, weeks_observed_count=1, detected_this_year=False)
         self.assertNotEqual(s, "expected_now")
 
-    def test_two_sporadic_detections_within_2wk_window_expected(self):
-        # Two non-adjacent hits in the +/-2 window count as enough evidence.
+    def test_two_distant_detections_at_pm2_NOT_expected(self):
+        # Hits at -2 and +2 only - no direct evidence at the current week.
+        # Visually this looks like an empty gap on the chart; the classifier
+        # should classify as 'coming_soon' (next hit is 2 weeks out), not
+        # 'expected_now'.
         s = classify_status(
             frequency_by_week=_freq([16, 20]),
             current_week=18, days_since_last_seen=120,
             years_observed=2, weeks_observed_count=2, detected_this_year=False)
+        self.assertEqual(s, "coming_soon")
+
+    def test_hit_at_minus1_is_expected_now(self):
+        s = classify_status(
+            frequency_by_week=_freq([17]),
+            current_week=18, days_since_last_seen=120,
+            years_observed=2, weeks_observed_count=1, detected_this_year=False)
+        self.assertEqual(s, "expected_now")
+
+    def test_hit_at_plus1_is_expected_now(self):
+        s = classify_status(
+            frequency_by_week=_freq([19]),
+            current_week=18, days_since_last_seen=120,
+            years_observed=2, weeks_observed_count=1, detected_this_year=False)
         self.assertEqual(s, "expected_now")
 
     def test_NOT_expected_now_in_empty_gap(self):

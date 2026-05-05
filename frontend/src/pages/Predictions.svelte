@@ -234,9 +234,9 @@
                           </div>
                         </div>
                       {/each}
-                      <!-- Faint band showing the +/- 2 week comparison window used by the classifier -->
+                      <!-- Faint band showing the +/- 1 week comparison window used by the classifier -->
                       <div class="absolute top-0 bottom-0 bg-amber-500/20 pointer-events-none rounded"
-                           style="left: {((data.current_week - 2) / 53) * 100}%; width: {(5 / 53) * 100}%">
+                           style="left: {((data.current_week - 1) / 53) * 100}%; width: {(3 / 53) * 100}%">
                       </div>
                       <!-- Solid line at the current week -->
                       <div class="absolute top-0 bottom-0 w-[2px] bg-amber-500 dark:bg-amber-400 pointer-events-none"

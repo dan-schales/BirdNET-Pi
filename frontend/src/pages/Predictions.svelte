@@ -224,17 +224,25 @@
                     {/if}
                   </td>
                   <td class="px-4 py-3 hidden md:table-cell w-[280px]">
-                    <div class="flex gap-px items-end w-full h-6 bg-gray-50 dark:bg-gray-800/40 rounded px-0.5"
+                    <div class="relative flex gap-px items-end w-full h-7 bg-gray-50 dark:bg-gray-800/40 rounded px-0.5"
                          title="Detection frequency by week of year">
                       {#each row.frequency_by_week as v, i}
-                        {@const isNow = i === data.current_week}
                         <div class="flex-1 flex flex-col justify-end h-full" title="Week {i}: {Math.round(v * 100)}% of years detected">
                           <div
-                            class="{isNow ? 'bg-amber-500 dark:bg-amber-400' : v > 0 ? 'bg-green-500 dark:bg-green-400' : 'bg-gray-300 dark:bg-gray-700'}"
-                            style="height: {isNow ? Math.max(v * 100, 100) : v > 0 ? Math.max(v * 100, 18) : 6}%">
+                            class="{v > 0 ? 'bg-green-500 dark:bg-green-400' : 'bg-gray-300 dark:bg-gray-700'}"
+                            style="height: {v > 0 ? Math.max(v * 100, 25) : 6}%">
                           </div>
                         </div>
                       {/each}
+                      <!-- Faint band showing the +/- 2 week comparison window used by the classifier -->
+                      <div class="absolute top-0 bottom-0 bg-amber-500/20 pointer-events-none rounded"
+                           style="left: {((data.current_week - 2) / 53) * 100}%; width: {(5 / 53) * 100}%">
+                      </div>
+                      <!-- Solid line at the current week -->
+                      <div class="absolute top-0 bottom-0 w-[2px] bg-amber-500 dark:bg-amber-400 pointer-events-none"
+                           style="left: calc({((data.current_week + 0.5) / 53) * 100}% - 1px)"
+                           title="Current week ({data.current_week})">
+                      </div>
                     </div>
                     <div class="flex justify-between text-[10px] text-gray-400 mt-1 w-full px-0.5">
                       <span>Jan</span><span>Apr</span><span>Jul</span><span>Oct</span><span>Dec</span>

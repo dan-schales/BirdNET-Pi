@@ -78,6 +78,25 @@ class TestClassifyStatus(unittest.TestCase):
             years_observed=3, weeks_observed_count=3, detected_this_year=False)
         self.assertEqual(s, "expected_now")
 
+    def test_single_distant_detection_not_expected_now(self):
+        # Only one historical detection at week 16, current week 18 (2 weeks away).
+        # With the tightened classifier this should NOT be 'expected_now' because
+        # the single hit isn't in the immediate +/-1 window and there's no
+        # second hit anywhere in the +/-2 window.
+        s = classify_status(
+            frequency_by_week=_freq([16]),
+            current_week=18, days_since_last_seen=120,
+            years_observed=2, weeks_observed_count=1, detected_this_year=False)
+        self.assertNotEqual(s, "expected_now")
+
+    def test_two_sporadic_detections_within_2wk_window_expected(self):
+        # Two non-adjacent hits in the +/-2 window count as enough evidence.
+        s = classify_status(
+            frequency_by_week=_freq([16, 20]),
+            current_week=18, days_since_last_seen=120,
+            years_observed=2, weeks_observed_count=2, detected_this_year=False)
+        self.assertEqual(s, "expected_now")
+
     def test_NOT_expected_now_in_empty_gap(self):
         # Detected at weeks 4 and 30 only; current week 18 is in a gap.
         # Old logic would say expected_now (window 4-30 spans it). New logic

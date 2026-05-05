@@ -6,9 +6,12 @@
   let data = $state(null);
   let loading = $state(true);
   let error = $state(null);
-  let filter = $state('actionable');
   let sortBy = $state('default');
-  let minDetections = $state(3);
+  let minDetections = $state(25);
+  let minDetectionsInput = $state(25);
+  let minDetectionsTimer = null;
+  // Multi-select status filter. Empty set means "ALL" (show everything).
+  let selectedStatuses = $state(new Set());
 
   const STATUS_META = {
     present:           { label: 'Present',         badge: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300' },
@@ -19,6 +22,16 @@
     out_of_season:     { label: 'Out of Season',   badge: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400' },
     insufficient_data: { label: 'Not Enough Data', badge: 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-500' },
   };
+
+  const FILTERS = [
+    { id: 'expected_now',      label: 'Expected Now' },
+    { id: 'coming_soon',       label: 'Coming Soon' },
+    { id: 'overdue',           label: 'Overdue' },
+    { id: 'late_season',       label: 'Late Season' },
+    { id: 'present',           label: 'Present' },
+    { id: 'out_of_season',     label: 'Out of Season' },
+    { id: 'insufficient_data', label: 'Not Enough Data' },
+  ];
 
   async function load() {
     loading = true;
@@ -34,23 +47,53 @@
 
   onMount(load);
 
+  // Debounce min-detections typing so we don't refetch on every keystroke.
+  function applyMinDetections() {
+    clearTimeout(minDetectionsTimer);
+    minDetectionsTimer = setTimeout(() => {
+      const n = parseInt(minDetectionsInput, 10);
+      if (Number.isFinite(n) && n >= 1 && n !== minDetections) {
+        minDetections = n;
+        load();
+      }
+    }, 350);
+  }
+
+  function setMinPreset(n) {
+    clearTimeout(minDetectionsTimer);
+    minDetectionsInput = n;
+    if (n !== minDetections) {
+      minDetections = n;
+      load();
+    }
+  }
+
+  function toggleStatus(status) {
+    const next = new Set(selectedStatuses);
+    if (next.has(status)) next.delete(status);
+    else next.add(status);
+    selectedStatuses = next;
+  }
+
+  function selectAll() {
+    // Empty set means "show everything" — same effect as having every pill on.
+    selectedStatuses = new Set();
+  }
+
   function weekToMonth(week) {
     if (week === null || week === undefined) return '—';
-    // Approximate: week N starts around (week * 7) days into the year.
     const d = new Date(2024, 0, 1 + week * 7);
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   }
 
   let species = $derived(data?.species ?? []);
 
+  let allSelected = $derived(selectedStatuses.size === 0);
+
   let filtered = $derived.by(() => {
     if (!species.length) return [];
-    if (filter === 'all') return species;
-    if (filter === 'actionable') {
-      return species.filter(s =>
-        ['expected_now', 'coming_soon', 'overdue'].includes(s.status));
-    }
-    return species.filter(s => s.status === filter);
+    if (allSelected) return species;
+    return species.filter(s => selectedStatuses.has(s.status));
   });
 
   let sorted = $derived.by(() => {
@@ -75,16 +118,6 @@
     c.actionable = (c.expected_now ?? 0) + (c.coming_soon ?? 0) + (c.overdue ?? 0);
     return c;
   });
-
-  const FILTERS = [
-    { id: 'actionable',    label: 'Actionable' },
-    { id: 'expected_now',  label: 'Expected Now' },
-    { id: 'coming_soon',   label: 'Coming Soon' },
-    { id: 'overdue',       label: 'Overdue' },
-    { id: 'present',       label: 'Present' },
-    { id: 'out_of_season', label: 'Out of Season' },
-    { id: 'all',           label: 'All' },
-  ];
 </script>
 
 <div class="space-y-6">
@@ -95,15 +128,27 @@
         When species typically appear, based on your local detection history.
       </p>
     </div>
-    <div class="flex items-center gap-2">
+    <div class="flex flex-wrap items-center gap-2">
       <label class="text-xs text-gray-500 dark:text-gray-400" for="pred-min-det">Min detections</label>
-      <select id="pred-min-det" bind:value={minDetections} onchange={load}
-              class="px-2 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
-        <option value={1}>1</option>
-        <option value={3}>3</option>
-        <option value={10}>10</option>
-        <option value={25}>25</option>
-      </select>
+      <input
+        id="pred-min-det"
+        type="number"
+        min="1"
+        max="100000"
+        bind:value={minDetectionsInput}
+        oninput={applyMinDetections}
+        class="w-20 px-2 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900" />
+      <div class="flex gap-1">
+        {#each [5, 25, 100, 500] as preset}
+          <button type="button" onclick={() => setMinPreset(preset)}
+                  class="px-2 py-1 text-[11px] rounded border transition-colors
+                    {minDetections === preset
+                      ? 'bg-green-600 text-white border-green-600'
+                      : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'}">
+            {preset}
+          </button>
+        {/each}
+      </div>
       <select bind:value={sortBy}
               class="px-2 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
         <option value="default">Default Order</option>
@@ -147,19 +192,38 @@
       </div>
     </div>
 
-    <!-- Filter pills -->
-    <div class="flex flex-wrap gap-2">
+    <!-- Filter pills (multi-select). Empty selection = ALL behind the scenes. -->
+    <div class="flex flex-wrap items-center gap-2">
+      <button
+        type="button"
+        onclick={selectAll}
+        class="px-3 py-1.5 text-xs font-medium rounded-full border transition-colors
+          {allSelected
+            ? 'bg-green-600 text-white border-green-600'
+            : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'}">
+        All
+        <span class="ml-1 opacity-70">{counts.all ?? 0}</span>
+      </button>
       {#each FILTERS as f}
+        {@const active = selectedStatuses.has(f.id)}
         <button
-          onclick={() => (filter = f.id)}
+          type="button"
+          onclick={() => toggleStatus(f.id)}
+          aria-pressed={active}
           class="px-3 py-1.5 text-xs font-medium rounded-full border transition-colors
-            {filter === f.id
+            {active
               ? 'bg-green-600 text-white border-green-600'
               : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'}">
           {f.label}
           <span class="ml-1 opacity-70">{counts[f.id] ?? 0}</span>
         </button>
       {/each}
+      {#if !allSelected}
+        <button type="button" onclick={selectAll}
+                class="px-2 py-1 text-[11px] text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 underline-offset-2 hover:underline">
+          Clear
+        </button>
+      {/if}
     </div>
 
     {#if sorted.length === 0}
@@ -184,7 +248,8 @@
             <tbody class="divide-y divide-gray-50 dark:divide-gray-800">
               {#each sorted as row (row.sci_name)}
                 {@const meta = STATUS_META[row.status] ?? STATUS_META.out_of_season}
-                <tr class="hover:bg-gray-50 dark:hover:bg-gray-800/50 align-top">
+                <tr class="hover:bg-gray-50 dark:hover:bg-gray-800/50 align-top"
+                    style="content-visibility: auto; contain-intrinsic-size: auto 72px;">
                   <td class="px-4 py-3">
                     <a href="#/species/{speciesSlug(row.sci_name)}"
                        class="font-medium hover:text-green-600 dark:hover:text-green-400">

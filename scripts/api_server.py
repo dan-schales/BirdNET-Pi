@@ -474,62 +474,81 @@ def api_weekly_report():
 
 
 @app.get("/api/v2/predictions")
-def api_predictions(min_detections: int = Query(3, ge=1, le=1000)):
+def api_predictions(min_detections: int = Query(25, ge=1, le=100000)):
     """Seasonal arrival/peak predictions per species, derived from local detections only.
 
     Aggregates by ISO-week across all years of recorded data and classifies each
     species relative to the current week (present, expected_now, coming_soon,
     overdue, late_season, out_of_season).
+
+    Performance:
+      - species are pre-filtered at the SQL level via HAVING COUNT(*) >= :min,
+        so the slow strftime-grouped scan only runs over qualifying species.
+      - results are cached for 10 minutes per min_detections value.
     """
     cache_key = f"predictions:{min_detections}"
-    cached = _cache.get(cache_key, max_age=300)
+    cached = _cache.get(cache_key, max_age=600)
     if cached is not None:
         return cached
 
-    week_rows_raw = query_all(
-        "SELECT Sci_Name, Com_Name, "
-        "CAST(strftime('%Y', Date) AS INTEGER) as year, "
-        "CAST(strftime('%W', Date) AS INTEGER) as week, "
-        "COUNT(*) as count "
-        "FROM detections GROUP BY Sci_Name, year, week"
-    )
-    week_rows = [
-        {"sci_name": r["Sci_Name"], "com_name": r["Com_Name"],
-         "year": r["year"], "week": r["week"], "count": r["count"]}
-        for r in week_rows_raw
-    ]
-
-    meta_raw = query_all(
-        "SELECT Sci_Name, COUNT(*) as total_count, "
-        "MIN(Date) as first_ever, "
-        "MAX(Date || ' ' || Time) as last_seen "
-        "FROM detections GROUP BY Sci_Name"
-    )
     today = datetime.now().date()
-    year_start = f"{today.year}-01-01"
-    first_this_year_raw = query_all(
-        "SELECT Sci_Name, MIN(Date) as first_this_year "
-        "FROM detections WHERE Date >= :start GROUP BY Sci_Name",
-        {"start": year_start},
+
+    # Step 1: qualifying species + meta in a single grouped scan.
+    # The Sci_Name index lets this run from the index without re-scanning rows.
+    qualifying = query_all(
+        "SELECT Sci_Name, Com_Name, COUNT(*) as total_count, "
+        "MIN(Date) as first_ever, "
+        "MAX(Date || ' ' || COALESCE(Time, '00:00:00')) as last_seen "
+        "FROM detections GROUP BY Sci_Name HAVING COUNT(*) >= :min",
+        {"min": min_detections},
     )
-    first_year_map = {r["Sci_Name"]: r["first_this_year"] for r in first_this_year_raw}
-    meta_rows = [
-        {"sci_name": m["Sci_Name"], "total_count": m["total_count"],
-         "first_ever": m["first_ever"], "last_seen": m["last_seen"],
-         "first_this_year": first_year_map.get(m["Sci_Name"])}
-        for m in meta_raw
-    ]
+    if not qualifying:
+        result = {
+            "current_week": int(today.strftime("%W")),
+            "current_year": today.year,
+            "years_in_data": 0,
+            "species": [],
+        }
+        _cache.set(cache_key, result)
+        return result
+
+    sci_names = [q["Sci_Name"] for q in qualifying]
+    placeholders = ",".join("?" * len(sci_names))
+    con = get_db()
+
+    # Step 2: weekly aggregation for only qualifying species.
+    week_cur = con.execute(
+        f"SELECT Sci_Name, Com_Name, "
+        f"CAST(strftime('%Y', Date) AS INTEGER) as year, "
+        f"CAST(strftime('%W', Date) AS INTEGER) as week, "
+        f"COUNT(*) as count "
+        f"FROM detections WHERE Sci_Name IN ({placeholders}) "
+        f"GROUP BY Sci_Name, year, week",
+        sci_names,
+    )
+    week_rows_raw = [dict(r) for r in week_cur.fetchall()]
+
+    # Step 3: first detection this calendar year, only for qualifying species.
+    year_start = f"{today.year}-01-01"
+    fty_cur = con.execute(
+        f"SELECT Sci_Name, MIN(Date) as first_this_year "
+        f"FROM detections WHERE Date >= ? AND Sci_Name IN ({placeholders}) "
+        f"GROUP BY Sci_Name",
+        [year_start] + sci_names,
+    )
+    first_year_map = {r["Sci_Name"]: r["first_this_year"]
+                      for r in fty_cur.fetchall()}
+
+    week_rows = [{"sci_name": r["Sci_Name"], "com_name": r["Com_Name"],
+                  "year": r["year"], "week": r["week"], "count": r["count"]}
+                 for r in week_rows_raw]
+    meta_rows = [{"sci_name": q["Sci_Name"], "total_count": q["total_count"],
+                  "first_ever": q["first_ever"], "last_seen": q["last_seen"],
+                  "first_this_year": first_year_map.get(q["Sci_Name"])}
+                 for q in qualifying]
 
     result = compute_predictions(week_rows, meta_rows, today=today,
                                  min_detections=min_detections)
-
-    # Attach image URLs from cache
-    if not _image_cache_loaded:
-        _load_image_cache()
-    for s in result["species"]:
-        image = _image_cache.get(s["sci_name"])
-        s["image_url"] = image["image_url"] if image else None
-
     _cache.set(cache_key, result)
     return result
 

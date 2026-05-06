@@ -10,6 +10,9 @@
   let minDetections = $state(25);
   let minDetectionsInput = $state(25);
   let minDetectionsTimer = null;
+  let minConfidencePct = $state(75);          // applied (sent to API)
+  let minConfidenceInput = $state(75);        // text-input-bound
+  let minConfidenceTimer = null;
   // Multi-select status filter. Empty set means "ALL" (show everything).
   let selectedStatuses = $state(new Set());
 
@@ -46,7 +49,7 @@
     loading = true;
     error = null;
     try {
-      data = await api.getPredictions(minDetections);
+      data = await api.getPredictions(minDetections, minConfidencePct / 100);
     } catch (e) {
       error = e.message || 'Failed to load predictions';
     } finally {
@@ -73,6 +76,28 @@
     minDetectionsInput = n;
     if (n !== minDetections) {
       minDetections = n;
+      load();
+    }
+  }
+
+  function applyMinConfidence() {
+    clearTimeout(minConfidenceTimer);
+    minConfidenceTimer = setTimeout(() => {
+      let n = parseInt(minConfidenceInput, 10);
+      if (!Number.isFinite(n)) return;
+      n = Math.max(0, Math.min(100, n));
+      if (n !== minConfidencePct) {
+        minConfidencePct = n;
+        load();
+      }
+    }, 350);
+  }
+
+  function setConfPreset(n) {
+    clearTimeout(minConfidenceTimer);
+    minConfidenceInput = n;
+    if (n !== minConfidencePct) {
+      minConfidencePct = n;
       load();
     }
   }
@@ -137,26 +162,56 @@
         When species typically appear, based on your local detection history.
       </p>
     </div>
-    <div class="flex flex-wrap items-center gap-2">
-      <label class="text-xs text-gray-500 dark:text-gray-400" for="pred-min-det">Min detections</label>
-      <input
-        id="pred-min-det"
-        type="number"
-        min="1"
-        max="100000"
-        bind:value={minDetectionsInput}
-        oninput={applyMinDetections}
-        class="w-20 px-2 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900" />
-      <div class="flex gap-1">
-        {#each [5, 25, 100, 500] as preset}
-          <button type="button" onclick={() => setMinPreset(preset)}
-                  class="px-2 py-1 text-[11px] rounded border transition-colors
-                    {minDetections === preset
-                      ? 'bg-green-600 text-white border-green-600'
-                      : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'}">
-            {preset}
-          </button>
-        {/each}
+    <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+      <div class="flex items-center gap-2"
+           title="Hide species with fewer than this many qualifying detections.">
+        <label class="text-xs text-gray-500 dark:text-gray-400" for="pred-min-det">Min detections</label>
+        <input
+          id="pred-min-det"
+          type="number"
+          min="1"
+          max="100000"
+          bind:value={minDetectionsInput}
+          oninput={applyMinDetections}
+          class="w-20 px-2 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900" />
+        <div class="flex gap-1">
+          {#each [5, 25, 100, 500] as preset}
+            <button type="button" onclick={() => setMinPreset(preset)}
+                    class="px-2 py-1 text-[11px] rounded border transition-colors
+                      {minDetections === preset
+                        ? 'bg-green-600 text-white border-green-600'
+                        : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'}">
+              {preset}
+            </button>
+          {/each}
+        </div>
+      </div>
+      <div class="flex items-center gap-2"
+           title="Exclude detections below this confidence from the seasonal model. Useful for ignoring noisy old recordings.">
+        <label class="text-xs text-gray-500 dark:text-gray-400" for="pred-min-conf">Min confidence</label>
+        <div class="relative">
+          <input
+            id="pred-min-conf"
+            type="number"
+            min="0"
+            max="100"
+            step="5"
+            bind:value={minConfidenceInput}
+            oninput={applyMinConfidence}
+            class="w-20 pl-2 pr-6 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900" />
+          <span class="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-400 pointer-events-none">%</span>
+        </div>
+        <div class="flex gap-1">
+          {#each [50, 75, 90] as preset}
+            <button type="button" onclick={() => setConfPreset(preset)}
+                    class="px-2 py-1 text-[11px] rounded border transition-colors
+                      {minConfidencePct === preset
+                        ? 'bg-green-600 text-white border-green-600'
+                        : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'}">
+              {preset}%
+            </button>
+          {/each}
+        </div>
       </div>
       <select bind:value={sortBy}
               class="px-2 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
@@ -279,8 +334,9 @@
                       {row.com_name}
                     </a>
                     <div class="text-[11px] italic text-gray-400">{row.sci_name}</div>
-                    <div class="text-[11px] text-gray-400 mt-0.5">
-                      {row.years_observed}y · {row.total_detections.toLocaleString()} detections
+                    <div class="text-[11px] text-gray-400 mt-0.5"
+                         title="Detections counted at >= {minConfidencePct}% confidence">
+                      {row.years_observed}y · {row.total_detections.toLocaleString()} detections @ {minConfidencePct}%+
                     </div>
                   </td>
                   <td class="px-4 py-3">

@@ -474,39 +474,47 @@ def api_weekly_report():
 
 
 @app.get("/api/v2/predictions")
-def api_predictions(min_detections: int = Query(25, ge=1, le=100000)):
+def api_predictions(
+    min_detections: int = Query(25, ge=1, le=100000),
+    min_confidence: float = Query(0.75, ge=0.0, le=1.0),
+):
     """Seasonal arrival/peak predictions per species, derived from local detections only.
 
     Aggregates by ISO-week across all years of recorded data and classifies each
     species relative to the current week (present, expected_now, coming_soon,
     overdue, late_season, out_of_season).
 
+    Detections below `min_confidence` are excluded from every aggregation, so
+    low-quality historical recordings don't influence the seasonal model.
+
     Performance:
       - species are pre-filtered at the SQL level via HAVING COUNT(*) >= :min,
         so the slow strftime-grouped scan only runs over qualifying species.
-      - results are cached for 10 minutes per min_detections value.
+      - results are cached for 10 minutes per (min_detections, min_confidence) pair.
     """
-    cache_key = f"predictions:{min_detections}"
+    cache_key = f"predictions:{min_detections}:{min_confidence}"
     cached = _cache.get(cache_key, max_age=600)
     if cached is not None:
         return cached
 
     today = datetime.now().date()
 
-    # Step 1: qualifying species + meta in a single grouped scan.
-    # The Sci_Name index lets this run from the index without re-scanning rows.
+    # Step 1: qualifying species + meta in a single grouped scan, filtered
+    # to confident detections.
     qualifying = query_all(
         "SELECT Sci_Name, Com_Name, COUNT(*) as total_count, "
         "MIN(Date) as first_ever, "
         "MAX(Date || ' ' || COALESCE(Time, '00:00:00')) as last_seen "
-        "FROM detections GROUP BY Sci_Name HAVING COUNT(*) >= :min",
-        {"min": min_detections},
+        "FROM detections WHERE Confidence >= :conf "
+        "GROUP BY Sci_Name HAVING COUNT(*) >= :min",
+        {"min": min_detections, "conf": min_confidence},
     )
     if not qualifying:
         result = {
             "current_week": int(today.strftime("%W")),
             "current_year": today.year,
             "years_in_data": 0,
+            "min_confidence": min_confidence,
             "species": [],
         }
         _cache.set(cache_key, result)
@@ -516,25 +524,28 @@ def api_predictions(min_detections: int = Query(25, ge=1, le=100000)):
     placeholders = ",".join("?" * len(sci_names))
     con = get_db()
 
-    # Step 2: weekly aggregation for only qualifying species.
+    # Step 2: weekly aggregation for only qualifying species (confident only).
     week_cur = con.execute(
         f"SELECT Sci_Name, Com_Name, "
         f"CAST(strftime('%Y', Date) AS INTEGER) as year, "
         f"CAST(strftime('%W', Date) AS INTEGER) as week, "
         f"COUNT(*) as count "
-        f"FROM detections WHERE Sci_Name IN ({placeholders}) "
+        f"FROM detections "
+        f"WHERE Confidence >= ? AND Sci_Name IN ({placeholders}) "
         f"GROUP BY Sci_Name, year, week",
-        sci_names,
+        [min_confidence] + sci_names,
     )
     week_rows_raw = [dict(r) for r in week_cur.fetchall()]
 
-    # Step 3: first detection this calendar year, only for qualifying species.
+    # Step 3: first detection this calendar year, only for qualifying species
+    # and only counting confident detections.
     year_start = f"{today.year}-01-01"
     fty_cur = con.execute(
         f"SELECT Sci_Name, MIN(Date) as first_this_year "
-        f"FROM detections WHERE Date >= ? AND Sci_Name IN ({placeholders}) "
+        f"FROM detections "
+        f"WHERE Date >= ? AND Confidence >= ? AND Sci_Name IN ({placeholders}) "
         f"GROUP BY Sci_Name",
-        [year_start] + sci_names,
+        [year_start, min_confidence] + sci_names,
     )
     first_year_map = {r["Sci_Name"]: r["first_this_year"]
                       for r in fty_cur.fetchall()}
@@ -549,6 +560,7 @@ def api_predictions(min_detections: int = Query(25, ge=1, le=100000)):
 
     result = compute_predictions(week_rows, meta_rows, today=today,
                                  min_detections=min_detections)
+    result["min_confidence"] = min_confidence
     _cache.set(cache_key, result)
     return result
 

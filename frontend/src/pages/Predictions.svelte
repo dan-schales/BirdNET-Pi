@@ -24,14 +24,23 @@
   };
 
   const FILTERS = [
-    { id: 'expected_now',      label: 'Expected Now' },
-    { id: 'coming_soon',       label: 'Coming Soon' },
-    { id: 'overdue',           label: 'Overdue' },
-    { id: 'late_season',       label: 'Late Season' },
-    { id: 'present',           label: 'Present' },
-    { id: 'out_of_season',     label: 'Out of Season' },
-    { id: 'insufficient_data', label: 'Not Enough Data' },
+    { id: 'expected_now',      label: 'Expected Now',
+      desc: 'Historically detected within ±1 week of the current week, but not seen in the last 30 days.' },
+    { id: 'coming_soon',       label: 'Coming Soon',
+      desc: 'No history right around now, but past years show detections coming up in the next 2–8 weeks.' },
+    { id: 'overdue',           label: 'Overdue',
+      desc: 'Was around 2–6 weeks ago in past years but hasn’t been detected yet this year.' },
+    { id: 'late_season',       label: 'Late Season',
+      desc: 'Still around recently, but historically the active window is winding down.' },
+    { id: 'present',           label: 'Present',
+      desc: 'Detected within the last 14 days.' },
+    { id: 'out_of_season',     label: 'Out of Season',
+      desc: 'No nearby historical detections, and none expected for several weeks.' },
+    { id: 'insufficient_data', label: 'Not Enough Data',
+      desc: 'Too little recorded history to make a reliable seasonal call yet.' },
   ];
+
+  const ALL_DESC = 'Show every species, regardless of seasonal status.';
 
   async function load() {
     loading = true;
@@ -197,12 +206,19 @@
       <button
         type="button"
         onclick={selectAll}
-        class="px-3 py-1.5 text-xs font-medium rounded-full border transition-colors
+        title={ALL_DESC}
+        class="relative group px-3 py-1.5 text-xs font-medium rounded-full border transition-colors
           {allSelected
             ? 'bg-green-600 text-white border-green-600'
             : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'}">
         All
         <span class="ml-1 opacity-70">{counts.all ?? 0}</span>
+        <span class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 max-w-[80vw]
+                     px-2.5 py-1.5 rounded bg-gray-900 dark:bg-gray-700 text-white text-[11px] leading-snug
+                     opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity
+                     z-20 shadow-lg whitespace-normal text-left font-normal">
+          {ALL_DESC}
+        </span>
       </button>
       {#each FILTERS as f}
         {@const active = selectedStatuses.has(f.id)}
@@ -210,12 +226,19 @@
           type="button"
           onclick={() => toggleStatus(f.id)}
           aria-pressed={active}
-          class="px-3 py-1.5 text-xs font-medium rounded-full border transition-colors
+          title={f.desc}
+          class="relative group px-3 py-1.5 text-xs font-medium rounded-full border transition-colors
             {active
               ? 'bg-green-600 text-white border-green-600'
               : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'}">
           {f.label}
           <span class="ml-1 opacity-70">{counts[f.id] ?? 0}</span>
+          <span class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 max-w-[80vw]
+                       px-2.5 py-1.5 rounded bg-gray-900 dark:bg-gray-700 text-white text-[11px] leading-snug
+                       opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity
+                       z-20 shadow-lg whitespace-normal text-left font-normal">
+            {f.desc}
+          </span>
         </button>
       {/each}
       {#if !allSelected}
